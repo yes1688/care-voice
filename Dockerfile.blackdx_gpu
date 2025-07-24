@@ -1,0 +1,119 @@
+# =======================================================
+# Care Voice GPU 加速 + 靜態鏈接解決方案
+# 使用 BlackDex rust-musl + NVIDIA CUDA 環境
+# 解決 whisper-rs 容器相容性問題並啟用 GPU 加速
+# =======================================================
+
+# ===============================
+# 階段 1: 前端構建
+# ===============================
+FROM docker.io/node:20-slim AS frontend-builder
+
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci --only=production
+COPY frontend/ ./
+RUN npm run build
+
+# ===============================
+# 階段 2: CUDA 開發環境準備
+# ===============================
+FROM docker.io/nvidia/cuda:12.2-devel-ubuntu20.04 AS cuda-env
+
+# 安裝 CUDA 開發工具和 CMake
+RUN apt-get update && apt-get install -y \
+    cmake \
+    build-essential \
+    git \
+    pkg-config \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 設置 CUDA 環境變數
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+
+# ===============================
+# 階段 3: BlackDex 靜態編譯 + GPU
+# ===============================
+FROM ghcr.io/blackdex/rust-musl:x86_64-musl AS builder
+
+# 從 CUDA 環境複製必要的 CUDA 庫和頭文件
+COPY --from=cuda-env /usr/local/cuda /usr/local/cuda
+
+# 設置 GPU 編譯環境變數
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+
+# 設置靜態鏈接標誌
+ENV RUSTFLAGS='-C target-feature=+crt-static'
+ENV PKG_CONFIG_ALLOW_CROSS=1
+ENV PKG_CONFIG_ALL_STATIC=true
+ENV OPENSSL_STATIC=true
+
+# whisper.cpp CUDA 編譯標誌
+ENV GGML_CUDA=1
+ENV CMAKE_CUDA_ARCHITECTURES="75;80;86;89"
+
+WORKDIR /app/backend
+
+# 複製依賴文件並構建依賴緩存
+COPY backend/Cargo.toml backend/Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN rm -rf src
+
+# 複製源碼並構建最終二進制
+COPY backend/src ./src
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+# ===============================
+# 階段 4: GPU 運行時環境
+# ===============================
+FROM docker.io/nvidia/cuda:12.2-runtime-ubuntu20.04
+
+# 安裝運行時依賴
+RUN apt-get update && apt-get install -y \
+    nginx \
+    supervisor \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 創建應用用戶和目錄
+RUN groupadd -g 1000 app && \
+    useradd -u 1000 -g app -m -s /bin/bash app && \
+    mkdir -p /app/models /var/log/supervisor /run/nginx
+
+# 複製靜態鏈接的 GPU 加速後端二進制
+COPY --from=builder /app/backend/target/x86_64-unknown-linux-musl/release/care-voice /app/care-voice
+RUN chown app:app /app/care-voice && chmod +x /app/care-voice
+
+# 複製 Whisper 模型文件
+COPY backend/models/ggml-base.bin /app/models/
+RUN chown -R app:app /app/models
+
+# 複製前端構建結果
+COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
+RUN chown -R nginx:nginx /usr/share/nginx/html
+
+# 複製配置文件
+COPY unified-nginx.conf /etc/nginx/nginx.conf
+COPY supervisord.conf /etc/supervisor/supervisord.conf
+
+# 創建日誌目錄
+RUN mkdir -p /var/log/nginx /var/log/supervisor && \
+    chown -R nginx:nginx /var/log/nginx
+
+WORKDIR /app
+EXPOSE 8000
+
+# GPU 健康檢查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# 啟動 supervisord
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]

@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  care-voice-unified:
+    build:
+      context: .
+      dockerfile: Dockerfile.unified
+    container_name: care-voice-unified
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=care_voice=info,whisper_rs=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      # 可選：持久化日誌
+      - care-voice-logs:/var/log/supervisor
+    networks:
+      - care-voice-network
+
+volumes:
+  care-voice-logs:
+    driver: local
+
+networks:
+  care-voice-network:
+    driver: bridge

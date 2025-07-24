@@ -1,0 +1,38 @@
+[package]
+name = "care-voice"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# 核心框架
+axum = { version = "0.8", features = ["multipart"] }
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tower-http = { version = "0.6", features = ["cors"] }
+
+# Whisper 語音識別 (本地化方案) + GPU 支援
+whisper-rs = { version = "0.10", features = ["cuda"] }
+
+# 音頻處理 (用於格式轉換)
+symphonia = { version = "0.5", features = [
+    "mkv",          # WebM/Matroska 容器支援
+    "vorbis"        # Vorbis 編解碼器 (Firefox/Chrome WebM)
+] }
+hound = "3.5"
+
+# 錯誤處理和日誌
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# 其他工具
+uuid = { version = "1.0", features = ["v4"] }
+
+# 性能優化 (針對 musl 靜態鏈接)
+jemallocator = { version = "0.5", optional = true }  # 替代 musl 的 malloc，提升多核性能
+
+[features]
+default = ["jemalloc"]
+jemalloc = ["jemallocator"]
+gpu = ["whisper-rs/cuda"]  # GPU 加速特性

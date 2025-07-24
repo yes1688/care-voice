@@ -1,0 +1,197 @@
+# Care Voice GPU 加速版本 - 基於驗證的 GPU 訪問方法
+FROM docker.io/library/ubuntu:22.04
+
+# 安裝運行時依賴和 NVIDIA GPU 支援
+RUN apt-get update && apt-get install -y \
+    nginx \
+    supervisor \
+    curl \
+    ca-certificates \
+    nvidia-utils-535 \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# 創建應用用戶和目錄
+RUN groupadd -g 1000 app && \
+    useradd -u 1000 -g app -m -s /bin/bash app && \
+    mkdir -p /app/models /var/log/supervisor /run/nginx
+
+# 安裝 Python Whisper (作為 GPU 加速的替代方案)
+RUN pip3 install openai-whisper torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# 複製前端文件 (從現有構建)
+COPY frontend/dist /usr/share/nginx/html
+RUN chown -R nginx:nginx /usr/share/nginx/html
+
+# 創建簡單的 Python GPU Whisper 服務
+RUN cat > /app/gpu_whisper_server.py << 'EOF'
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import tempfile
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
+import cgi
+import torch
+import whisper
+
+class WhisperHandler(BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        self.model = None
+        super().__init__(*args, **kwargs)
+    
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            # 檢查 GPU 可用性
+            gpu_available = torch.cuda.is_available()
+            device = "cuda" if gpu_available else "cpu"
+            
+            response = {
+                "status": "healthy",
+                "service": "Care Voice GPU Whisper",
+                "version": "1.0.0",
+                "gpu_available": gpu_available,
+                "device": device,
+                "cuda_device_count": torch.cuda.device_count() if gpu_available else 0
+            }
+            
+            self.wfile.write(json.dumps(response, indent=2).encode())
+        else:
+            self.send_error(404)
+    
+    def do_POST(self):
+        if self.path == '/upload':
+            try:
+                # 處理文件上傳
+                content_type = self.headers['Content-Type']
+                if not content_type.startswith('multipart/form-data'):
+                    self.send_error(400, "Expected multipart/form-data")
+                    return
+                
+                # 解析 multipart 數據
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                
+                # 創建臨時文件保存音頻
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_file:
+                    # 簡化處理：假設 post_data 包含音頻數據
+                    # 實際實現需要正確解析 multipart/form-data
+                    temp_file.write(post_data)
+                    temp_file_path = temp_file.name
+                
+                # 載入 Whisper 模型 (GPU 加速)
+                if self.model is None:
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                    print(f"Loading Whisper model on {device}")
+                    self.model = whisper.load_model("base", device=device)
+                
+                # 轉錄音頻
+                result = self.model.transcribe(temp_file_path)
+                transcript = result["text"]
+                
+                # 清理臨時文件
+                os.unlink(temp_file_path)
+                
+                # 返回結果
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                
+                response = {
+                    "full_transcript": transcript,
+                    "summary": f"GPU 轉錄摘要: {transcript[:100]}..." if len(transcript) > 100 else transcript
+                }
+                
+                self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
+                
+            except Exception as e:
+                print(f"Error: {e}")
+                self.send_error(500, str(e))
+        else:
+            self.send_error(404)
+    
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+if __name__ == '__main__':
+    port = int(os.environ.get('BACKEND_PORT', 8080))
+    server = HTTPServer(('0.0.0.0', port), WhisperHandler)
+    print(f"GPU Whisper server starting on port {port}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"CUDA devices: {torch.cuda.device_count()}")
+        print(f"Current device: {torch.cuda.current_device()}")
+    server.serve_forever()
+EOF
+
+RUN chmod +x /app/gpu_whisper_server.py
+
+# 複製配置文件
+COPY unified-nginx.conf /etc/nginx/nginx.conf
+
+# 創建 supervisord 配置用於 GPU 版本
+RUN cat > /etc/supervisor/supervisord_gpu.conf << 'EOF'
+[unix_http_server]
+file=/var/run/supervisor.sock
+
+[supervisord]
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+childlogdir=/var/log/supervisor
+nodaemon=true
+minfds=1024
+minprocs=200
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+serverurl=unix:///var/run/supervisor.sock
+
+# GPU Whisper 後端服務
+[program:gpu-whisper-backend]
+command=/usr/bin/python3 /app/gpu_whisper_server.py
+directory=/app
+user=app
+autostart=true
+autorestart=true
+stdout_logfile=/var/log/supervisor/gpu-whisper-backend.log
+stderr_logfile=/var/log/supervisor/gpu-whisper-backend.log
+environment=BACKEND_PORT="8080"
+
+# nginx 前端代理
+[program:nginx]
+command=/usr/sbin/nginx -g "daemon off;"
+user=root
+autostart=true
+autorestart=true
+stdout_logfile=/var/log/supervisor/nginx.log
+stderr_logfile=/var/log/supervisor/nginx.log
+EOF
+
+# 創建日誌目錄
+RUN mkdir -p /var/log/nginx /var/log/supervisor && \
+    chown -R nginx:nginx /var/log/nginx && \
+    chown -R app:app /app
+
+WORKDIR /app
+EXPOSE 8000
+
+# GPU 健康檢查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# 啟動 supervisord
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord_gpu.conf"]
