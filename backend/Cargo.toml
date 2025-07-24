@@ -12,7 +12,7 @@ serde_json = "1.0"
 tower-http = { version = "0.6", features = ["cors"] }
 
 # Whisper 語音識別 (本地化方案) + GPU 支援
-whisper-rs = { version = "0.10", features = ["cuda"] }
+whisper-rs = { version = "0.14.3", features = ["cuda"] }
 
 # 音頻處理 (用於格式轉換)
 symphonia = { version = "0.5", features = [
