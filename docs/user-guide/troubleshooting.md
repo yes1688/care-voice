@@ -170,11 +170,56 @@ podman run -d --name care-voice --gpus all -p 0.0.0.0:8001:8001 care-voice:whisp
 setsebool -P container_connect_any 1
 ```
 
-### 6. 音頻上傳問題
+### 6. 音頻格式轉換問題 ⭐
+
+#### 症狀
+- Chrome/Edge 瀏覽器錄音後出現 `422 Unprocessable Entity` 錯誤
+- 錯誤信息: "Audio format conversion failed"
+- Firefox/Safari 瀏覽器正常工作
+
+#### 根本原因
+Chrome/Edge 使用 WebM Opus 編碼，但後端 symphonia 庫缺少 Opus 解碼支援。
+
+#### 快速診斷
+```bash
+# 檢查錯誤日誌
+podman exec care-voice-ultimate grep "Audio conversion failed" /var/log/supervisor/whisper-rs.log
+
+# 預期看到: "格式探測失敗: end of stream" 或 "不支援的音頻編解碼器"
+```
+
+#### 臨時解決方案
+**建議用戶使用其他瀏覽器**:
+- ✅ **Firefox**: 使用 WebM Vorbis (已支援)
+- ✅ **Safari**: 使用 WAV 格式 (已支援)
+- ❌ **Chrome/Edge**: WebM Opus 格式 (暫不支援)
+
+#### 永久解決方案
+參考完整的技術解決方案:
+- **問題分析**: [WebM 音頻格式技術分析](../technical/WEBM_AUDIO_ANALYSIS.md)
+- **解決方案**: [WebM 解決方案設計](../technical/WEBM_SOLUTION_PLAN.md)
+- **實施步驟**: [詳細實施指南](../technical/IMPLEMENTATION_STEPS.md)
+
+**簡短修復步驟**:
+```bash
+# 1. 更新依賴配置
+vim backend/Cargo.toml
+# 添加 "opus" 到 symphonia features
+
+# 2. 重建容器
+podman build -f Dockerfile.whisper-rs-gpu -t care-voice:webm-fixed .
+
+# 3. 部署更新
+podman stop care-voice-ultimate && podman rm care-voice-ultimate
+podman run -d --name care-voice-ultimate --device /dev/nvidia0 \
+  -p 8001:8001 care-voice:webm-fixed
+```
+
+### 7. 其他音頻上傳問題
 
 #### 症狀
 - 錄音功能無法使用
-- 音頻文件上傳失敗
+- 音頻文件上傳失敗 (非格式問題)
 
 #### 瀏覽器相關
 ```javascript
@@ -186,7 +231,7 @@ setsebool -P container_connect_any 1
 #### 後端診斷
 ```bash
 # 檢查上傳端點
-curl -X POST -F "audio=@test.wav" http://localhost:8001/transcribe
+curl -X POST -F "audio=@test.wav" http://localhost:8001/api/upload
 
 # 檢查文件大小限制
 podman exec -it care-voice cat /etc/nginx/nginx.conf | grep client_max_body_size

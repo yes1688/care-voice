@@ -151,6 +151,43 @@ tokio = { version = "1.0", features = ["full"] }
 - pkg-config
 - CUDA Toolkit (包含在基礎映像中)
 
+## 🎵 音頻處理架構
+
+### 支援格式
+```typescript
+// 前端格式優先級 (frontend/src/App.tsx)
+const formatPriority = [
+  'audio/wav',      // 優先 (直接支援，Safari)
+  'audio/webm',     // Chrome (Opus 編碼)
+  'audio/ogg'       # Firefox (Vorbis 編碼)
+];
+```
+
+### 後端音頻解碼器 (backend/Cargo.toml)
+```toml
+symphonia = { version = "0.5", features = [
+    "mkv",          # WebM/Matroska 容器支援
+    "vorbis",       # Firefox WebM/Vorbis 編解碼器  
+    "opus",         # Chrome WebM/Opus 編解碼器 (2025-07-26 新增)
+    "flac",         # FLAC 無損格式支援
+    "mp3"           # MP3 格式支援
+] }
+```
+
+### 音頻轉換流程
+```
+瀏覽器錄音 → multipart 上傳 → 格式探測 → 解碼 → PCM 樣本 → whisper-rs GPU → 文字
+    ↓              ↓           ↓        ↓       ↓          ↓
+  WebM/WAV     FormData    hound/    Vec<f32>  CUDA     String
+                          symphonia          加速
+```
+
+### 已知問題和解決方案
+- **問題**: Chrome WebM Opus 格式轉換失敗 (2025-07-26 發現)
+- **根因**: symphonia 缺少 `opus` 編解碼器支援
+- **解決方案**: [WebM 音頻格式解決方案](./WEBM_SOLUTION_PLAN.md)
+- **狀態**: 文檔化完成，實施待進行
+
 ## 🔍 實施步驟
 
 ### Phase 1: 基礎架構 ✅
@@ -165,9 +202,16 @@ tokio = { version = "1.0", features = ["full"] }
 1. **nginx 配置** - 使用 unified-nginx.conf
 2. **supervisord 配置** - 使用 supervisord_whisper_rs.conf
 
-### Phase 4: 測試驗證
+### Phase 4: 音頻格式支援 🔄
+1. **問題診斷** - 已完成 ([詳細分析](./WEBM_AUDIO_ANALYSIS.md))
+2. **解決方案設計** - 已完成 ([解決方案](./WEBM_SOLUTION_PLAN.md))
+3. **實施步驟文檔** - 已完成 ([實施指南](./IMPLEMENTATION_STEPS.md))
+4. **代碼修復** - 待實施
+
+### Phase 5: 測試驗證
 1. **功能測試** - 容器建構成功
 2. **效能測試** - 待實施
+3. **音頻格式測試** - 待完成
 
 ## 📊 效能比較目標
 
