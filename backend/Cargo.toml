@@ -14,11 +14,17 @@ tower-http = { version = "0.6", features = ["cors"] }
 # Whisper 語音識別 (本地化方案) + GPU 支援
 whisper-rs = { version = "0.14.3", features = ["cuda"] }
 
-# 音頻處理 (用於格式轉換)
+# 音頻處理 (用於格式轉換) - 添加更多格式支援
 symphonia = { version = "0.5", features = [
     "mkv",          # WebM/Matroska 容器支援
-    "vorbis"        # Vorbis 編解碼器 (Firefox/Chrome WebM)
+    "vorbis",       # Vorbis 編解碼器 (Firefox WebM)
+    "ogg",          # OGG 容器格式支援
+    "flac",         # FLAC 無損格式支援 (可選)
+    "wav"           # WAV 格式支援
 ] }
+
+# 新增 FFmpeg 備用解碼器 (用於 Opus 支援)
+# 注意: symphonia 0.5 不支援 opus，需要外部解決方案
 hound = "3.5"
 
 # 錯誤處理和日誌

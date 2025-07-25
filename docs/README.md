@@ -18,18 +18,25 @@
 
 | 文檔 | 描述 | 適用對象 |
 |------|------|----------|
+| **[系統狀態](./technical/system-status.md)** | 專案當前狀態和成就 | 專案經理 |
 | **[系統架構](./technical/architecture.md)** | 技術設計和實施計劃 | 技術人員 |
 | **[GPU 配置](./technical/gpu-configuration.md)** | CUDA 設置和優化 | GPU 專家 |
 | **[效能指南](./technical/performance-guide.md)** | 效能測試和調優 | 性能工程師 |
+| **[瀏覽器音頻分析](./technical/BROWSER_AUDIO_RECORDING_ANALYSIS.md)** | 瀏覽器音頻格式深度調查 | 音頻專家 |
+| **[Opus 後端方案](./technical/OPUS_BACKEND_SOLUTION.md)** | 業界標準音頻處理方案 | 架構師 |
+| **[WebM 解決方案](./technical/WEBM_SOLUTION_PLAN.md)** | 音頻格式問題多方案對比 | 技術人員 |
 
 ### 💻 開發文檔
 開發者和維護者參考資料
 
 | 文檔 | 描述 | 適用對象 |
 |------|------|----------|
+| **[部署指南](./development/deployment-guide.md)** | 容器部署和監控命令 | DevOps |
+| **[環境配置](./development/environment-setup.md)** | CUDA 12.9.1 環境設置 | 開發者 |
 | **[API 參考](./development/api-reference.md)** | 接口文檔和範例 | 開發者 |
 | **[容器指南](./development/container-guide.md)** | Docker/Podman 使用 | DevOps |
 | **[whisper-rs 配置](./development/whisper-rs-setup.md)** | Rust 後端配置 | Rust 開發者 |
+| **[Opus 實施指南](./development/OPUS_IMPLEMENTATION_GUIDE.md)** | Opus 後端處理詳細實施步驟 | 開發者 |
 
 ## 🚀 核心特色
 
@@ -45,13 +52,16 @@
 `README.md` → [快速開始](./user-guide/quick-start.md) → [安裝指南](./user-guide/installation.md)
 
 ### 開發者
-[快速開始](./user-guide/quick-start.md) → [系統架構](./technical/architecture.md) → [API 參考](./development/api-reference.md)
+[環境配置](./development/environment-setup.md) → [系統架構](./technical/architecture.md) → [API 參考](./development/api-reference.md)
 
 ### 運維人員
-[快速開始](./user-guide/quick-start.md) → [故障排除](./user-guide/troubleshooting.md) → [容器指南](./development/container-guide.md)
+[部署指南](./development/deployment-guide.md) → [故障排除](./user-guide/troubleshooting.md) → [容器指南](./development/container-guide.md)
 
 ### 性能專家
-[GPU 配置](./technical/gpu-configuration.md) → [效能指南](./technical/performance-guide.md) → [系統架構](./technical/architecture.md)
+[GPU 配置](./technical/gpu-configuration.md) → [效能指南](./technical/performance-guide.md) → [系統狀態](./technical/system-status.md)
+
+### 專案經理
+[系統狀態](./technical/system-status.md) → [部署指南](./development/deployment-guide.md) → [系統架構](./technical/architecture.md)
 
 ## 📊 效能對比
 
@@ -65,8 +75,16 @@
 ## 🔗 外部資源
 
 - **專案首頁**：[README.md](../README.md)
-- **系統配置**：[claude.md](../claude.md)
+- **開發規範**：[claude.md](../claude.md) - 角色定義和開發規定
 - **GitHub Repository**：[Care Voice](https://github.com/your-repo)
+
+## 📂 新增文檔
+
+**最新更新 (2025-07-25)**：文檔結構重新組織，新增以下專業文檔：
+
+- 🚀 **[部署指南](./development/deployment-guide.md)** - 完整的容器部署和監控指南
+- 🛠️ **[環境配置](./development/environment-setup.md)** - CUDA 12.9.1 升級和開發環境設置  
+- 📊 **[系統狀態](./technical/system-status.md)** - 專案里程碑和技術成就報告
 
 ---
 
@@ -74,6 +92,12 @@
 
 **最後更新**：2025-07-25  
 **維護狀態**：✅ 當前  
-**文檔版本**：v2.0
+**文檔版本**：v2.1 - 重新組織完成
+
+### 文檔組織變更
+- ✅ **claude.md 簡化**：專注於角色定義和開發規定
+- ✅ **技術內容分離**：分散到專業的技術文檔中
+- ✅ **交叉引用完善**：建立清晰的文檔導航關係
+- ✅ **用戶導向優化**：按角色組織文檔內容
 
 如需更新文檔，請參考各文檔頭部的更新說明。

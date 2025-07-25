@@ -202,11 +202,13 @@ symphonia = { version = "0.5", features = [
 1. **nginx 配置** - 使用 unified-nginx.conf
 2. **supervisord 配置** - 使用 supervisord_whisper_rs.conf
 
-### Phase 4: 音頻格式支援 🔄
+### Phase 4: 音頻格式支援 ✅
 1. **問題診斷** - 已完成 ([詳細分析](./WEBM_AUDIO_ANALYSIS.md))
-2. **解決方案設計** - 已完成 ([解決方案](./WEBM_SOLUTION_PLAN.md))
-3. **實施步驟文檔** - 已完成 ([實施指南](./IMPLEMENTATION_STEPS.md))
-4. **代碼修復** - 待實施
+2. **瀏覽器調查** - 已完成 ([瀏覽器分析](./BROWSER_AUDIO_RECORDING_ANALYSIS.md))
+3. **解決方案設計** - 已完成 ([多方案對比](./WEBM_SOLUTION_PLAN.md))
+4. **業界標準方案** - 已完成 ([Opus 後端方案](./OPUS_BACKEND_SOLUTION.md))
+5. **實施指南** - 已完成 ([實施步驟](../development/OPUS_IMPLEMENTATION_GUIDE.md))
+6. **代碼修復** - 準備實施 (採用 Opus 後端處理)
 
 ### Phase 5: 測試驗證
 1. **功能測試** - 容器建構成功

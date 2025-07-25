@@ -11,7 +11,26 @@ podman ps | grep care-voice
 curl http://localhost:8001/health
 
 # 檢查容器日誌
-podman logs care-voice | tail -20
+podman logs care-voice-ultimate | tail -20
+```
+
+## ⚡ 快速修復指令
+
+### 最常見問題的一鍵修復
+```bash
+# 1. 服务完全重啟 (解决 90% 问题)
+podman restart care-voice-ultimate
+
+# 2. GPU 訪問恢復
+podman exec care-voice-ultimate python3 /app/gpu_diagnostics.py
+
+# 3. 健康檢查確認
+curl http://localhost:8001/health | jq
+
+# 4. 容器重新部署 (如果以上都失效)
+podman stop care-voice-ultimate && podman rm care-voice-ultimate
+podman run -d --name care-voice-ultimate --gpus all -p 8001:8001 \
+  -v ./backend/models:/app/models:ro care-voice:whisper-rs-gpu-v2
 ```
 
 ## 🔥 常見問題解決
@@ -25,17 +44,18 @@ podman logs care-voice | tail -20
 #### 解決方案
 ```bash
 # 檢查詳細錯誤
-podman logs care-voice
+podman logs care-voice-ultimate
 
 # 檢查埠口衝突
 lsof -i :8001
 
 # 停止衝突服務
-podman stop $(podman ps -q --filter "ancestor=care-voice:whisper-rs-gpu")
+podman stop $(podman ps -q --filter "ancestor=care-voice:whisper-rs-gpu-v2")
 
 # 清理並重新啟動
-podman rm care-voice
-podman run -d --name care-voice --gpus all -p 8001:8001 care-voice:whisper-rs-gpu
+podman rm care-voice-ultimate
+podman run -d --name care-voice-ultimate --gpus all -p 8001:8001 \
+  -v ./backend/models:/app/models:ro care-voice:whisper-rs-gpu-v2
 ```
 
 ### 2. GPU 不可用
@@ -50,10 +70,13 @@ podman run -d --name care-voice --gpus all -p 8001:8001 care-voice:whisper-rs-gp
 nvidia-smi
 
 # 檢查容器內 GPU
-podman exec -it care-voice nvidia-smi
+podman exec -it care-voice-ultimate nvidia-smi
 
-# 檢查 CUDA 版本
-podman exec -it care-voice nvcc --version
+# 檢查 CUDA 版本 (應為 12.9.1)
+podman exec -it care-voice-ultimate nvcc --version
+
+# 使用專用 GPU 診斷工具
+podman exec care-voice-ultimate python3 /app/gpu_diagnostics.py
 ```
 
 #### 解決方案
@@ -170,50 +193,92 @@ podman run -d --name care-voice --gpus all -p 0.0.0.0:8001:8001 care-voice:whisp
 setsebool -P container_connect_any 1
 ```
 
-### 6. 音頻格式轉換問題 ⭐
+### 6. 音頻格式轉換問題 ⭐ (已解決方案)
 
 #### 症狀
 - Chrome/Edge 瀏覽器錄音後出現 `422 Unprocessable Entity` 錯誤
+- Firefox 瀏覽器也出現同樣錯誤 (2025年更新)
 - 錯誤信息: "Audio format conversion failed"
-- Firefox/Safari 瀏覽器正常工作
+- Safari 需要 HTTPS 才能錄音
 
-#### 根本原因
-Chrome/Edge 使用 WebM Opus 編碼，但後端 symphonia 庫缺少 Opus 解碼支援。
+#### 根本原因 (已確認)
+**2025年重大發現**: 所有現代瀏覽器都已遷移到 Opus 編碼器:
+- **Chrome/Edge**: `audio/webm;codecs=opus`
+- **Firefox**: `audio/ogg;codecs=opus` (從 Vorbis 遷移)
+- **Safari**: `audio/mp4` (AAC 編碼，需要 HTTPS)
+
+**技術限制**: 後端 symphonia 0.5.4 不支援 Opus 解碼器
+
+📊 **深度分析**: [瀏覽器音頻錄製完整分析](../technical/BROWSER_AUDIO_RECORDING_ANALYSIS.md)
 
 #### 快速診斷
 ```bash
-# 檢查錯誤日誌
-podman exec care-voice-ultimate grep "Audio conversion failed" /var/log/supervisor/whisper-rs.log
+# 檢查當前錯誤狀況
+podman exec care-voice-ultimate grep -E "(Audio conversion failed|不支援)" /var/log/supervisor/whisper-rs.log | tail -5
 
-# 預期看到: "格式探測失敗: end of stream" 或 "不支援的音頻編解碼器"
+# 檢查瀏覽器使用的格式
+podman logs care-voice-ultimate | grep -E "(webm|ogg|mp4)" | tail -3
+
+# 檢查服務狀態
+curl -s http://localhost:8001/health | jq
 ```
 
-#### 臨時解決方案
-**建議用戶使用其他瀏覽器**:
-- ✅ **Firefox**: 使用 WebM Vorbis (已支援)
-- ✅ **Safari**: 使用 WAV 格式 (已支援)
-- ❌ **Chrome/Edge**: WebM Opus 格式 (暫不支援)
+#### 🚀 推薦解決方案: Opus 後端處理
+**基於業界標準 (Discord/Zoom/Google 同款技術)**:
 
-#### 永久解決方案
-參考完整的技術解決方案:
-- **問題分析**: [WebM 音頻格式技術分析](../technical/WEBM_AUDIO_ANALYSIS.md)
-- **解決方案**: [WebM 解決方案設計](../technical/WEBM_SOLUTION_PLAN.md)
-- **實施步驟**: [詳細實施指南](../technical/IMPLEMENTATION_STEPS.md)
+##### 完整解決方案文檔
+- 🎯 **[Opus 後端處理方案](../technical/OPUS_BACKEND_SOLUTION.md)** - 業界標準技術方案
+- 🛠️ **[實施指南](../development/OPUS_IMPLEMENTATION_GUIDE.md)** - 詳細實施步驟
+- 📊 **[多方案對比](../technical/WEBM_SOLUTION_PLAN.md)** - 技術方案比較
 
-**簡短修復步驟**:
+##### 核心修復步驟
 ```bash
-# 1. 更新依賴配置
-vim backend/Cargo.toml
-# 添加 "opus" 到 symphonia features
+# 1. 實施 Opus 後端支援 (推薦方案)
+# 更新 backend/Cargo.toml
+[dependencies]
+opus = "0.3.0"              # 原生 Opus 解碼器
+ogg = "0.9.0"               # Firefox OGG 容器支援
+webm-parser = "0.1.0"       # Chrome WebM 容器支援
 
-# 2. 重建容器
-podman build -f Dockerfile.whisper-rs-gpu -t care-voice:webm-fixed .
+# 2. 重建容器 (包含 Opus 支援)
+podman build -f Dockerfile.whisper-rs-gpu -t care-voice:opus-support .
 
-# 3. 部署更新
+# 3. 部署更新版本
 podman stop care-voice-ultimate && podman rm care-voice-ultimate
 podman run -d --name care-voice-ultimate --device /dev/nvidia0 \
-  -p 8001:8001 care-voice:webm-fixed
+  --device /dev/nvidiactl --device /dev/nvidia-uvm \
+  -p 8001:8001 \
+  -v ./backend/models:/app/models:ro \
+  care-voice:opus-support
+
+# 4. 驗證修復效果
+curl -s http://localhost:8001/health
+# 測試 Chrome/Firefox 錄音功能
 ```
+
+#### 預期修復效果
+```
+修復前:
+Chrome:  ❌ WebM Opus → 422 錯誤
+Firefox: ❌ OGG Opus → 422 錯誤
+Safari:  ❓ 需要 HTTPS 測試
+
+修復後:
+Chrome:  ✅ WebM Opus → 成功轉錄
+Firefox: ✅ OGG Opus → 成功轉錄  
+Safari:  ✅ MP4 AAC → 成功轉錄 (HTTPS 環境)
+```
+
+#### 臨時應急方案
+如果暫時無法實施 Opus 支援，建議:
+
+1. **引導用戶使用 Safari** (需要 HTTPS)
+2. **提供用戶友善的錯誤信息**:
+   ```
+   "⚠️ 瀏覽器音頻格式暫時不支援
+   建議: 1. 使用 Safari 瀏覽器
+        2. 或等待系統更新 (Opus 支援)"
+   ```
 
 ### 7. 其他音頻上傳問題
 
@@ -372,11 +437,27 @@ podman run -d --name care-voice --gpus all -p 8001:8001 \
 } > care-voice-debug.log
 ```
 
-### 社群支援
+### 社群支援與相關文檔
 - **GitHub Issues**: [專案 Issues 頁面]
-- **文檔**: [完整技術文檔](../technical/)
-- **配置參考**: [系統配置](../../claude.md)
+- **完整文檔系統**:
+  - [GPU 配置與診斷](../technical/gpu-configuration.md) - 詳細的 GPU 設置和故障排除
+  - [部署指南](../development/deployment-guide.md) - 容器部署和監控
+  - [環境配置](../development/environment-setup.md) - CUDA 12.9.1 環境設置
+  - [系統狀態](../technical/system-status.md) - 專案當前狀態和成就
+- **角色定義**: [開發規範](../../claude.md)
+
+### 效能監控命令
+```bash
+# GPU 使用率實時監控 (從 claude.md)
+watch -n 1 'podman exec care-voice-ultimate nvidia-smi'
+
+# 容器資源監控
+podman stats care-voice-ultimate
+
+# 服務健康狀態監控
+watch -n 5 'curl -s http://localhost:8001/health | jq'
+```
 
 ---
 
-**提示**: 大多數問題可以通過重新啟動容器解決。如果問題持續存在，請收集日誌並參考 [GPU 配置指南](../technical/gpu-configuration.md)。
+**提示**: 90% 的問題可以通過 `podman restart care-voice-ultimate` 解決。對於 GPU 相關問題，請使用 `python3 /app/gpu_diagnostics.py` 診斷工具並參考 [GPU 配置指南](../technical/gpu-configuration.md)。

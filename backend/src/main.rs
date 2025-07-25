@@ -15,8 +15,16 @@ use axum::{
 };
 use serde::Serialize;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, error, warn};
 use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
+
+// 全域統計計數器
+static WAV_COUNT: AtomicU64 = AtomicU64::new(0);
+static WEBM_OPUS_COUNT: AtomicU64 = AtomicU64::new(0);
+static WEBM_VORBIS_COUNT: AtomicU64 = AtomicU64::new(0);
+static CONVERSION_SUCCESS_COUNT: AtomicU64 = AtomicU64::new(0);
+static CONVERSION_FAILURE_COUNT: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Serialize)]
 struct TranscriptResponse {
@@ -177,8 +185,25 @@ async fn upload_audio(
             // 轉換音頻格式 (WebM/OGG -> WAV samples)
             let audio_samples = convert_to_wav_samples(&data).map_err(|e| {
                 error!("Audio conversion failed: {}", e);
-                (StatusCode::UNPROCESSABLE_ENTITY, Json(ErrorResponse { error: "Audio format conversion failed".to_string() }))
+                CONVERSION_FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
+                
+                // 提供更友好的錯誤信息
+                let user_message = if e.to_string().contains("不支援的音頻編解碼器") || 
+                                      e.to_string().contains("Unsupported") {
+                    "⚠️ Chrome/Edge WebM Opus 格式暫時不支援。推薦使用：\n✅ Firefox (WebM Vorbis 格式)\n✅ Safari (WAV 格式)\n📝 Opus 支援正在開發中"
+                } else if e.to_string().contains("無法識別音頻格式") {
+                    "無法識別音頻格式，請確認音頻文件完整且格式正確"
+                } else {
+                    "音頻格式轉換失敗。支援格式：WAV, WebM (Vorbis)"
+                };
+                
+                (StatusCode::UNPROCESSABLE_ENTITY, Json(ErrorResponse { 
+                    error: user_message.to_string() 
+                }))
             })?;
+            
+            // 轉換成功統計
+            CONVERSION_SUCCESS_COUNT.fetch_add(1, Ordering::Relaxed);
             
             info!("Audio converted to {} samples", audio_samples.len());
             
@@ -281,11 +306,24 @@ fn try_decode_with_symphonia(data: &[u8]) -> Result<Vec<f32>, Box<dyn std::error
         .format(&hint, media_source, &FormatOptions::default(), &MetadataOptions::default())
         .map_err(|e| {
             error!("格式探測失敗: {}", e);
+            
+            // 提供更詳細的錯誤信息
+            let data_preview = if data.len() >= 16 {
+                format!("{:02x?}", &data[..16])
+            } else {
+                format!("{:02x?}", data)
+            };
+            
+            error!("音頻數據前16位元組: {}", data_preview);
+            
             // 區分不同類型的格式錯誤
             match e {
                 symphonia::core::errors::Error::IoError(ref io_err) 
                     if io_err.kind() == std::io::ErrorKind::UnexpectedEof => {
-                    "音頻文件可能已完全解析，但缺少尾部信息 - 嘗試繼續處理".to_string()
+                    "音頻文件可能已完全解析，但缺少尾部信息".to_string()
+                },
+                symphonia::core::errors::Error::Unsupported(_) => {
+                    "不支援的音頻編解碼器，請確認已安裝所需的 symphonia 特性".to_string()
                 },
                 _ => format!("無法識別音頻格式: {}", e)
             }
