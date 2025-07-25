@@ -197,8 +197,11 @@ nvidia-smi
 # 檢查 CUDA 版本
 nvcc --version
 
-# 檢查容器 GPU 訪問
-podman run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu20.04 nvidia-smi
+# 檢查容器 GPU 訪問 (更新為 12.9.1)
+podman run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
+
+# 快速 GPU 診斷
+podman exec care-voice-ultimate python3 /app/gpu_diagnostics.py
 ```
 
 ### 容器內 GPU 診斷
@@ -322,6 +325,13 @@ podman stats care-voice-ultimate
 
 # whisper-rs GPU 診斷工具
 podman exec care-voice-ultimate python3 /app/gpu_diagnostics.py
+
+# 檢查容器狀態
+podman ps
+podman logs care-voice-ultimate
+
+# 重啟服務
+podman restart care-voice-ultimate
 ```
 
 ## 🔬 問題解決方法論
@@ -467,6 +477,53 @@ cargo build --release --features cuda
 - CUDA 13.0 預備架構已就位
 - 最新工具鏈確保持續領先
 - 容器化方案便於快速升級
+
+## 🚀 快速參考指南
+
+### 核心命令速查表
+
+#### 建構與部署
+```bash
+# 建構 GPU 版本
+podman build -f Dockerfile.whisper-rs-gpu -t care-voice:whisper-rs-gpu-v2 .
+
+# 運行 GPU 服務
+podman run -d --name care-voice-ultimate --gpus all -p 8001:8001 \
+  -v ./backend/models:/app/models:ro care-voice:whisper-rs-gpu-v2
+
+# 驗證部署
+curl http://localhost:8001/health
+```
+
+#### GPU 診斷
+```bash
+# 主机 GPU 检查
+nvidia-smi
+
+# 容器 GPU 診斷
+podman exec care-voice-ultimate python3 /app/gpu_diagnostics.py
+
+# GPU 使用率監控
+watch -n 1 'podman exec care-voice-ultimate nvidia-smi'
+```
+
+#### 故障排除
+```bash
+# 檢查容器狀態
+podman ps && podman logs care-voice-ultimate
+
+# 重啟服務
+podman restart care-voice-ultimate
+
+# 檢查 GPU 訪問
+podman run --rm --gpus all nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
+```
+
+### 相關文檔
+- **部署指南**: [../development/deployment-guide.md](../development/deployment-guide.md)
+- **環境配置**: [../development/environment-setup.md](../development/environment-setup.md)  
+- **系統狀態**: [system-status.md](./system-status.md)
+- **故障排除**: [../user-guide/troubleshooting.md](../user-guide/troubleshooting.md)
 
 ---
 
