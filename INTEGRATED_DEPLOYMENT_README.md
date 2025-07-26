@@ -2,25 +2,33 @@
 
 ## 🎯 快速開始
 
-### **最簡單的方式 (推薦)**
+### **一鍵部署 (推薦)**
 ```bash
-# 一鍵部署
-./deploy-simple.sh
+# 部署 Care Voice 服務
+./deploy.sh
 ```
 
-### **完整構建方式**
+### **服務管理**
 ```bash
-# 詳細構建和部署
-./build-integrated.sh
+# 啟動服務
+./manage.sh start
+
+# 停止服務  
+./manage.sh stop
+
+# 查看狀態
+./manage.sh status
+
+# 查看日誌
+./manage.sh logs
 ```
 
-### **使用 podman-compose**
+### **開發模式**
 ```bash
-# 構建並啟動
-podman-compose -f podman-compose.integrated.yml up --build -d
-
-# 僅構建不啟動
-podman-compose -f podman-compose.integrated.yml build
+# 完整構建選項
+./build.sh           # 生產構建
+./build.sh dev       # 開發模式
+./build.sh build-only # 僅構建
 ```
 
 ---
@@ -48,6 +56,14 @@ nginx (統一入口)
 
 ## 🔧 文件說明
 
+### **核心腳本 (僅3個)**
+| 腳本 | 用途 | 使用頻率 |
+|------|------|----------|
+| `deploy.sh` | 一鍵部署 | ⭐⭐⭐ 主要使用 |
+| `manage.sh` | 服務管理 | ⭐⭐ 日常管理 |
+| `build.sh` | 完整構建 | ⭐ 開發調試 |
+
+### **配置文件**
 | 文件 | 用途 |
 |------|------|
 | `frontend/Dockerfile.build` | 前端編譯階段 |
@@ -56,77 +72,69 @@ nginx (統一入口)
 | `nginx-integrated.conf` | 統一 nginx 配置 |
 | `supervisord-integrated.conf` | 多進程管理 |
 | `podman-compose.integrated.yml` | 整合編排配置 |
-| `build-integrated.sh` | 完整構建腳本 |
-| `deploy-simple.sh` | 簡化部署腳本 |
 
 ---
 
 ## 🚀 使用方式
 
-### **1. 生產環境部署**
+### **1. 首次部署**
 ```bash
-# 方式一: 一鍵部署 (最簡單)
-./deploy-simple.sh
-
-# 方式二: 完整構建
-./build-integrated.sh production
-
-# 方式三: compose 手動
-podman-compose -f podman-compose.integrated.yml up -d --build
+# 一鍵部署 (最簡單)
+./deploy.sh
 ```
 
-### **2. 開發環境**
+### **2. 日常管理**
 ```bash
-# 啟動開發模式 (前端熱重載)
-./build-integrated.sh dev
+# 啟動服務
+./manage.sh start
 
-# 或使用 compose
-podman-compose -f podman-compose.integrated.yml --profile dev up -d
+# 停止服務
+./manage.sh stop
+
+# 重啟服務
+./manage.sh restart
+
+# 查看狀態
+./manage.sh status
+
+# 實時日誌
+./manage.sh logs
+
+# 健康檢查
+./manage.sh health
 ```
 
-### **3. 僅構建不啟動**
+### **3. 開發模式**
 ```bash
-# 僅構建所有鏡像
-./build-integrated.sh build-only
+# 生產構建
+./build.sh
 
-# 或分別構建
-podman-compose -f podman-compose.integrated.yml build frontend-builder
-podman-compose -f podman-compose.integrated.yml build backend-builder  
-podman-compose -f podman-compose.integrated.yml build care-voice-integrated
+# 開發模式 (前端熱重載)
+./build.sh dev
+
+# 僅構建不啟動
+./build.sh build-only
 ```
 
 ---
 
 ## 🔍 服務管理
 
-### **查看狀態**
+### **快速命令**
 ```bash
-# 容器狀態
+# 所有操作都通過 manage.sh
+./manage.sh status    # 查看狀態
+./manage.sh logs      # 查看日誌  
+./manage.sh health    # 健康檢查
+./manage.sh restart   # 重啟服務
+```
+
+### **手動 compose 操作** (進階)
+```bash
+# 直接使用 compose (不推薦日常使用)
 podman-compose -f podman-compose.integrated.yml ps
-
-# 服務日誌
 podman-compose -f podman-compose.integrated.yml logs -f
-
-# 健康檢查
-curl http://localhost:8000/health
-```
-
-### **停止服務**
-```bash
-# 停止所有服務
 podman-compose -f podman-compose.integrated.yml down
-
-# 停止並清理
-podman-compose -f podman-compose.integrated.yml down --volumes --remove-orphans
-```
-
-### **重啟服務**
-```bash
-# 重啟整合服務
-podman-compose -f podman-compose.integrated.yml restart care-voice-integrated
-
-# 重新構建並重啟
-podman-compose -f podman-compose.integrated.yml up -d --build --force-recreate
 ```
 
 ---
