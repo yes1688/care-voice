@@ -1,8 +1,19 @@
 # 📚 Care Voice 文檔中心
 
-**Care Voice** - 業界領先的 Rust whisper-rs + GPU 加速錄音轉文字系統
+**Care Voice** - 業界領先的 Rust whisper-rs + GPU 加速錄音轉文字系統  
+**最新架構**: 整合架構 v1.0 (2025-07-26)
 
 ## 🎯 快速導航
+
+### ⚡ **整合架構 (最新)**
+最新的統一部署架構文檔
+
+| 文檔 | 描述 | 適用對象 |
+|------|------|----------|
+| **[快速參考指南](../QUICK_REFERENCE.md)** | 30秒快速上手 | ⭐⭐⭐ 所有用戶 |
+| **[整合部署指南](../INTEGRATED_DEPLOYMENT_README.md)** | 完整部署說明 | ⭐⭐ 運維人員 |
+| **[架構設計文檔](./development/INTEGRATED_ARCHITECTURE_DESIGN.md)** | 詳細技術設計 | 開發人員 |
+| **[實施總結報告](./development/INTEGRATED_ARCHITECTURE_FINAL_SUMMARY.md)** | 完整成果報告 | 管理人員 |
 
 ### 👥 用戶指南
 適合所有用戶的操作指南和參考資料
@@ -36,7 +47,8 @@
 | **[API 參考](./development/api-reference.md)** | 接口文檔和範例 | 開發者 |
 | **[容器指南](./development/container-guide.md)** | Docker/Podman 使用 | DevOps |
 | **[whisper-rs 配置](./development/whisper-rs-setup.md)** | Rust 後端配置 | Rust 開發者 |
-| **[Opus 實施指南](./development/OPUS_IMPLEMENTATION_GUIDE.md)** | Opus 後端處理詳細實施步驟 | 開發者 |
+| **[實施時間線](./development/IMPLEMENTATION_TIMELINE.md)** | 整合架構實施記錄 | 項目團隊 |
+| **[容器現況總覽](./development/CARE_VOICE_CONTAINER_STATUS_OVERVIEW.md)** | 容器狀態分析 | 運維人員 |
 
 ## 🚀 核心特色
 
@@ -48,20 +60,22 @@
 
 ## 🎯 依角色導航
 
-### 新用戶
-`README.md` → [快速開始](./user-guide/quick-start.md) → [安裝指南](./user-guide/installation.md)
+### 🆕 新用戶 (整合架構)
+[快速參考指南](../QUICK_REFERENCE.md) → [整合部署指南](../INTEGRATED_DEPLOYMENT_README.md) → 運行 `./deploy.sh`
 
-### 開發者
-[環境配置](./development/environment-setup.md) → [系統架構](./technical/architecture.md) → [API 參考](./development/api-reference.md)
+### 👨‍💻 開發者 (整合架構)
+[架構設計文檔](./development/INTEGRATED_ARCHITECTURE_DESIGN.md) → [項目架構指南](./development/PROJECT_ARCHITECTURE_GUIDE.md) → [實施總結](./development/INTEGRATED_ARCHITECTURE_FINAL_SUMMARY.md)
 
-### 運維人員
-[部署指南](./development/deployment-guide.md) → [故障排除](./user-guide/troubleshooting.md) → [容器指南](./development/container-guide.md)
+### 🔧 運維人員 (整合架構)  
+[快速參考指南](../QUICK_REFERENCE.md) → [容器現況總覽](./development/CARE_VOICE_CONTAINER_STATUS_OVERVIEW.md) → [故障排除](./user-guide/troubleshooting.md)
 
-### 性能專家
-[GPU 配置](./technical/gpu-configuration.md) → [效能指南](./technical/performance-guide.md) → [系統狀態](./technical/system-status.md)
+### 📋 管理人員 (整合架構)
+[實施總結報告](./development/INTEGRATED_ARCHITECTURE_FINAL_SUMMARY.md) → [實施時間線](./development/IMPLEMENTATION_TIMELINE.md) → [架構設計](./development/INTEGRATED_ARCHITECTURE_DESIGN.md)
 
-### 專案經理
-[系統狀態](./technical/system-status.md) → [部署指南](./development/deployment-guide.md) → [系統架構](./technical/architecture.md)
+### 🔧 傳統架構參考
+- **開發者**: [環境配置](./development/environment-setup.md) → [系統架構](./technical/architecture.md)
+- **運維人員**: [部署指南](./development/deployment-guide.md) → [容器指南](./development/container-guide.md)
+- **性能專家**: [GPU 配置](./technical/gpu-configuration.md) → [效能指南](./technical/performance-guide.md)
 
 ## 📊 效能對比
 
