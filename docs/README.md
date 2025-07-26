@@ -1,19 +1,20 @@
 # 📚 Care Voice 文檔中心
 
 **Care Voice** - 業界領先的 Rust whisper-rs + GPU 加速錄音轉文字系統  
-**最新架構**: 整合架構 v1.0 (2025-07-26)
+**最新架構**: 統一架構 v2.0 (2025-07-26)
 
 ## 🎯 快速導航
 
-### ⚡ **整合架構 (最新)**
-最新的統一部署架構文檔
+### ⚡ **統一架構 (最新)**
+最新的統一 multi-stage 構建架構文檔
 
 | 文檔 | 描述 | 適用對象 |
 |------|------|----------|
 | **[快速參考指南](../QUICK_REFERENCE.md)** | 30秒快速上手 | ⭐⭐⭐ 所有用戶 |
 | **[整合部署指南](../INTEGRATED_DEPLOYMENT_README.md)** | 完整部署說明 | ⭐⭐ 運維人員 |
+| **[統一架構實施報告](./development/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md)** | v2.0 架構重構報告 | ⭐⭐⭐ 所有用戶 |
 | **[架構設計文檔](./development/INTEGRATED_ARCHITECTURE_DESIGN.md)** | 詳細技術設計 | 開發人員 |
-| **[實施總結報告](./development/INTEGRATED_ARCHITECTURE_FINAL_SUMMARY.md)** | 完整成果報告 | 管理人員 |
+| **[實施總結報告](./development/INTEGRATED_ARCHITECTURE_FINAL_SUMMARY.md)** | v1.0 完整成果報告 | 管理人員 |
 
 ### 👥 用戶指南
 適合所有用戶的操作指南和參考資料
@@ -60,17 +61,17 @@
 
 ## 🎯 依角色導航
 
-### 🆕 新用戶 (整合架構)
-[快速參考指南](../QUICK_REFERENCE.md) → [整合部署指南](../INTEGRATED_DEPLOYMENT_README.md) → 運行 `./deploy.sh`
+### 🆕 新用戶 (統一架構 v2.0)
+[快速參考指南](../QUICK_REFERENCE.md) → [統一架構部署指南](../INTEGRATED_DEPLOYMENT_README.md) → 運行 `./deploy.sh`
 
-### 👨‍💻 開發者 (整合架構)
-[架構設計文檔](./development/INTEGRATED_ARCHITECTURE_DESIGN.md) → [項目架構指南](./development/PROJECT_ARCHITECTURE_GUIDE.md) → [實施總結](./development/INTEGRATED_ARCHITECTURE_FINAL_SUMMARY.md)
+### 👨‍💻 開發者 (統一架構 v2.0)
+[統一架構實施報告](./development/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md) → [架構設計文檔](./development/INTEGRATED_ARCHITECTURE_DESIGN.md) → [項目架構指南](./development/PROJECT_ARCHITECTURE_GUIDE.md)
 
-### 🔧 運維人員 (整合架構)  
-[快速參考指南](../QUICK_REFERENCE.md) → [容器現況總覽](./development/CARE_VOICE_CONTAINER_STATUS_OVERVIEW.md) → [故障排除](./user-guide/troubleshooting.md)
+### 🔧 運維人員 (統一架構 v2.0)  
+[快速參考指南](../QUICK_REFERENCE.md) → [統一架構實施報告](./development/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md) → [故障排除](./user-guide/troubleshooting.md)
 
-### 📋 管理人員 (整合架構)
-[實施總結報告](./development/INTEGRATED_ARCHITECTURE_FINAL_SUMMARY.md) → [實施時間線](./development/IMPLEMENTATION_TIMELINE.md) → [架構設計](./development/INTEGRATED_ARCHITECTURE_DESIGN.md)
+### 📋 管理人員 (統一架構 v2.0)
+[統一架構實施報告](./development/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md) → [實施時間線](./development/IMPLEMENTATION_TIMELINE.md) → [架構設計](./development/INTEGRATED_ARCHITECTURE_DESIGN.md)
 
 ### 🔧 傳統架構參考
 - **開發者**: [環境配置](./development/environment-setup.md) → [系統架構](./technical/architecture.md)
@@ -104,11 +105,15 @@
 
 ## 📄 文檔維護
 
-**最後更新**：2025-07-25  
+**最後更新**：2025-07-26  
 **維護狀態**：✅ 當前  
-**文檔版本**：v2.1 - 重新組織完成
+**文檔版本**：v3.0 - 統一架構更新
 
-### 文檔組織變更
+### 文檔組織變更 (v3.0)
+- ✅ **統一架構實施**：從 v1.0 整合架構升級到 v2.0 統一架構
+- ✅ **配置文件簡化**：移除複雜的三階段容器依賴，採用標準 multi-stage 構建
+- ✅ **部署流程優化**：一鍵部署腳本支援新架構
+- ✅ **文檔完整更新**：所有相關文檔指向新的統一架構
 - ✅ **claude.md 簡化**：專注於角色定義和開發規定
 - ✅ **技術內容分離**：分散到專業的技術文檔中
 - ✅ **交叉引用完善**：建立清晰的文檔導航關係

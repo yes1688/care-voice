@@ -1,12 +1,18 @@
-# 🏗️ Care Voice 整合部署指南
+# 🏗️ Care Voice 統一架構部署指南
+
+**版本**: v2.0 統一架構版  
+**更新日期**: 2025-07-26  
+**架構**: 統一 multi-stage Dockerfile  
 
 ## 🎯 快速開始
 
 ### **一鍵部署 (推薦)**
 ```bash
-# 部署 Care Voice 服務
+# 部署 Care Voice 統一服務
 ./deploy.sh
 ```
+
+**✅ 新架構特點**: 使用標準 multi-stage 構建，大幅簡化部署流程
 
 ### **服務管理**
 ```bash
@@ -35,11 +41,12 @@
 
 ## 📋 架構說明
 
-### **三階段構建流程**
+### **統一 Multi-Stage 構建**
 ```
-1. 前端編譯 → frontend/Dockerfile.build → care-voice-frontend:latest
-2. 後端編譯 → backend/Dockerfile.build → care-voice-backend:latest  
-3. 最終整合 → Dockerfile.final → care-voice-integrated:latest
+Dockerfile.unified:
+1. 前端構建階段 → Node.js 20 + SolidJS + Vite
+2. 後端構建階段 → Rust 1.85 + whisper-rs + Opus
+3. 最終整合階段 → nginx + supervisor 統一管理
 ```
 
 ### **最終服務架構**
@@ -50,6 +57,11 @@ nginx (統一入口)
     ├── / → 前端 SolidJS 應用
     ├── /api → 後端 Rust 服務 :8001
     └── /health → 健康檢查
+
+統一容器 care-voice-integrated
+    ├── nginx (前端靜態文件)
+    ├── supervisor (進程管理)
+    └── care-voice (後端服務)
 ```
 
 ---
@@ -66,12 +78,10 @@ nginx (統一入口)
 ### **配置文件**
 | 文件 | 用途 |
 |------|------|
-| `frontend/Dockerfile.build` | 前端編譯階段 |
-| `backend/Dockerfile.build` | 後端編譯階段 |
-| `Dockerfile.final` | 最終整合階段 |
+| `Dockerfile.unified` | 統一 multi-stage 構建 |
+| `podman-compose.simple.yml` | 簡化服務編排 |
 | `nginx-integrated.conf` | 統一 nginx 配置 |
 | `supervisord-integrated.conf` | 多進程管理 |
-| `podman-compose.integrated.yml` | 整合編排配置 |
 
 ---
 
@@ -132,9 +142,9 @@ nginx (統一入口)
 ### **手動 compose 操作** (進階)
 ```bash
 # 直接使用 compose (不推薦日常使用)
-podman-compose -f podman-compose.integrated.yml ps
-podman-compose -f podman-compose.integrated.yml logs -f
-podman-compose -f podman-compose.integrated.yml down
+podman-compose -f podman-compose.simple.yml ps
+podman-compose -f podman-compose.simple.yml logs -f
+podman-compose -f podman-compose.simple.yml down
 ```
 
 ---
@@ -173,7 +183,7 @@ podman system prune -f
 #### **2. 服務啟動失敗**
 ```bash
 # 查看日誌
-podman-compose -f podman-compose.integrated.yml logs
+podman-compose -f podman-compose.simple.yml logs
 
 # 檢查容器狀態
 podman ps -a | grep care-voice
@@ -250,8 +260,8 @@ ports:
 ### **修改 nginx 配置**
 編輯 `nginx-integrated.conf` 後重新構建:
 ```bash
-podman-compose -f podman-compose.integrated.yml build care-voice-integrated
-podman-compose -f podman-compose.integrated.yml up -d --force-recreate
+podman-compose -f podman-compose.simple.yml build care-voice-integrated
+podman-compose -f podman-compose.simple.yml up -d --force-recreate
 ```
 
 ### **環境變數**

@@ -29,7 +29,9 @@ RUN mkdir -p \
     /var/log/care-voice \
     && echo "✅ 目錄結構創建完成"
 
-# 階段1: 從前端編譯階段複製靜態文件
+# 階段1: 從前端編譯階段複製靜態文件 (等待構建完成)
+# 注意: 依賴 podman-compose 中 frontend-builder 和 backend-builder 服務
+# 這些鏡像會在構建過程中由 compose 自動創建
 COPY --from=care-voice-frontend:latest /app/dist/ /usr/share/nginx/html/
 RUN echo "✅ 前端靜態文件複製完成" && \
     ls -la /usr/share/nginx/html/

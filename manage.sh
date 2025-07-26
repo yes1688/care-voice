@@ -7,8 +7,8 @@
 set -e
 
 # 配置
-COMPOSE_FILE="podman-compose.integrated.yml"
-SERVICE_NAME="care-voice-integrated"
+COMPOSE_FILE="podman-compose.simple.yml"
+SERVICE_NAME="care-voice"
 
 # 顏色定義
 GREEN='\033[0;32m'

@@ -16,7 +16,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # 配置變數
-COMPOSE_FILE="podman-compose.integrated.yml"
+COMPOSE_FILE="podman-compose.simple.yml"
 PROJECT_NAME="care-voice"
 BUILD_MODE=${1:-"production"}  # production, dev, build-only
 SKIP_CLEANUP=${SKIP_CLEANUP:-false}

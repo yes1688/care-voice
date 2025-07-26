@@ -2,7 +2,7 @@
 # Care Voice 後端編譯階段  
 # 目標: Rust + Opus 支援編譯
 # =======================================================
-FROM rust:1.75-slim AS backend-builder
+FROM rust:1.85-slim AS backend-builder
 
 LABEL stage="backend-build"
 LABEL version="1.0.0"

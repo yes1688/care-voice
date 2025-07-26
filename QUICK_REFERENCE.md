@@ -8,12 +8,14 @@
 ## 🚀 快速開始 (30秒)
 
 ```bash
-# 一鍵部署 Care Voice
+# 一鍵部署 Care Voice (統一架構)
 ./deploy.sh
 
 # 訪問服務
 open http://localhost:8000
 ```
+
+**✅ 新架構狀態**: 統一 multi-stage Dockerfile，大幅簡化部署流程
 
 ---
 
@@ -66,7 +68,7 @@ open http://localhost:8000
 
 ### **完全重置**
 ```bash
-podman-compose -f podman-compose.integrated.yml down --volumes
+podman-compose -f podman-compose.simple.yml down --volumes
 ./deploy.sh
 ```
 
@@ -85,14 +87,13 @@ build.sh              # 完整構建
 ```
 nginx-integrated.conf              # nginx 配置
 supervisord-integrated.conf        # 進程管理
-podman-compose.integrated.yml      # 服務編排
+podman-compose.simple.yml          # 統一服務編排
 ```
 
 ### **構建文件**
 ```
-frontend/Dockerfile.build         # 前端編譯
-backend/Dockerfile.build          # 後端編譯
-Dockerfile.final                  # 最終整合
+Dockerfile.unified                 # 統一 multi-stage 構建
+podman-compose.simple.yml          # 簡化服務配置
 ```
 
 ---
@@ -200,7 +201,7 @@ VERBOSE=true ./build.sh                          # 詳細構建
 
 ### **完整重建流程**
 ```bash
-podman-compose -f podman-compose.integrated.yml down --volumes
+podman-compose -f podman-compose.simple.yml down --volumes
 podman system prune -f
 ./deploy.sh
 ```
