@@ -1,20 +1,23 @@
 [package]
 name = "care-voice"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
-# 核心框架
-axum = { version = "0.8", features = ["multipart"] }
+# Web 框架
+axum = { version = "0.7", features = ["multipart"] }
 tokio = { version = "1.0", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors"] }
+
+# 序列化
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tower-http = { version = "0.6", features = ["cors"] }
 
-# Whisper 語音識別 (本地化方案) + GPU 支援
-whisper-rs = { version = "0.14.3", features = ["cuda"] }
+# 語音識別
+whisper-rs = { version = "0.13", features = ["cuda"] }
 
-# 音頻處理 (用於格式轉換) - 添加更多格式支援
+# 音頻處理 (添加 Opus 支援)
+opus = { version = "0.3.0", optional = true }
 symphonia = { version = "0.5", features = [
     "mkv",          # WebM/Matroska 容器支援
     "vorbis",       # Vorbis 編解碼器 (Firefox WebM)
@@ -23,22 +26,30 @@ symphonia = { version = "0.5", features = [
     "wav"           # WAV 格式支援
 ] }
 
-# 新增 FFmpeg 備用解碼器 (用於 Opus 支援)
-# 注意: symphonia 0.5 不支援 opus，需要外部解決方案
+# WAV 檔案處理
 hound = "3.5"
 
-# 錯誤處理和日誌
+# OGG 容器支援
+ogg = "0.9.0"
+
+# 音頻樣本處理工具
+byteorder = "1.4"
+
+# 錯誤處理
 anyhow = "1.0"
+thiserror = "1.0"
+
+# 日誌和時間
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
 
-# 其他工具
-uuid = { version = "1.0", features = ["v4"] }
-
-# 性能優化 (針對 musl 靜態鏈接)
-jemallocator = { version = "0.5", optional = true }  # 替代 musl 的 malloc，提升多核性能
+# 記憶體分配器 (可選，針對性能優化)
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+jemallocator = { version = "0.5", optional = true }
 
 [features]
-default = ["jemalloc"]
+default = ["opus-support"]
 jemalloc = ["jemallocator"]
-gpu = ["whisper-rs/cuda"]  # GPU 加速特性
+opus-support = ["opus"]
+cuda = ["whisper-rs/cuda"]

@@ -19,6 +19,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, error, warn};
 use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
 
+// 新增音頻處理模組
+mod audio_format;
+mod opus_decoder;
+mod audio_decoder;
+
+use audio_format::AudioFormat;
+use audio_decoder::UnifiedAudioDecoder;
+
 // 全域統計計數器
 static WAV_COUNT: AtomicU64 = AtomicU64::new(0);
 static WEBM_OPUS_COUNT: AtomicU64 = AtomicU64::new(0);
@@ -147,6 +155,7 @@ async fn main() {
     
     let app = Router::new()
         .route("/upload", post(upload_audio))
+        .route("/api/upload", post(upload_audio))  // 添加前端期望的路由
         .route("/health", get(health_check))
         .layer(cors)
         .with_state(whisper_service);
@@ -175,6 +184,12 @@ async fn upload_audio(
         if field.name() == Some("audio") {
             info!("Processing audio field");
             
+            // 獲取 MIME 類型以改進格式檢測
+            let content_type = field.content_type()
+                .map(|ct| ct.to_string())
+                .unwrap_or_else(|| "application/octet-stream".to_string());
+            info!("音頻 MIME 類型: {}", content_type);
+            
             let data = field.bytes().await.map_err(|e| {
                 error!("Error reading audio bytes: {}", e);
                 (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "Failed to read audio data".to_string() }))
@@ -182,19 +197,22 @@ async fn upload_audio(
             
             info!("Received audio data: {} bytes", data.len());
             
-            // 轉換音頻格式 (WebM/OGG -> WAV samples)
-            let audio_samples = convert_to_wav_samples(&data).map_err(|e| {
+            // 使用新的統一音頻解碼器 (支援 Opus)
+            let audio_samples = convert_to_wav_samples_with_mime(&data, &content_type).map_err(|e| {
                 error!("Audio conversion failed: {}", e);
                 CONVERSION_FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
                 
-                // 提供更友好的錯誤信息
-                let user_message = if e.to_string().contains("不支援的音頻編解碼器") || 
-                                      e.to_string().contains("Unsupported") {
-                    "⚠️ Chrome/Edge WebM Opus 格式暫時不支援。推薦使用：\n✅ Firefox (WebM Vorbis 格式)\n✅ Safari (WAV 格式)\n📝 Opus 支援正在開發中"
-                } else if e.to_string().contains("無法識別音頻格式") {
-                    "無法識別音頻格式，請確認音頻文件完整且格式正確"
+                // 根據新的解碼器提供友善的錯誤信息
+                let user_message = if e.to_string().contains("Opus") {
+                    "✅ Opus 格式支援已啟用！如果仍有問題，請檢查音頻品質或容器格式。"
+                } else if e.to_string().contains("WebM") {
+                    "WebM 容器解析問題。請嘗試：\n✅ Firefox (OGG-Opus 格式)\n🔄 重新錄製音頻"
+                } else if e.to_string().contains("MP4") || e.to_string().contains("AAC") {
+                    "Safari MP4-AAC 格式支援有限。建議使用：\n✅ Chrome (WebM-Opus)\n✅ Firefox (OGG-Opus)"
+                } else if e.to_string().contains("無法識別") || e.to_string().contains("未知") {
+                    "無法識別音頻格式。支援格式：\n✅ WebM-Opus (Chrome/Edge)\n✅ OGG-Opus (Firefox)\n✅ WAV (通用)"
                 } else {
-                    "音頻格式轉換失敗。支援格式：WAV, WebM (Vorbis)"
+                    "音頻格式轉換失敗。請確認音頻檔案完整且使用支援的格式。"
                 };
                 
                 (StatusCode::UNPROCESSABLE_ENTITY, Json(ErrorResponse { 
@@ -229,13 +247,47 @@ async fn upload_audio(
     Err((StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "No audio field found".to_string() })))
 }
 
-// 音頻格式轉換 (簡化版本 - 假設輸入是 WAV 或可直接解碼的格式)
-fn convert_to_wav_samples(audio_data: &[u8]) -> Result<Vec<f32>, Box<dyn std::error::Error + '_>> {
-    info!("Converting audio data to WAV samples");
+// 新的音頻格式轉換函數 - 支援 Opus 和 MIME 類型檢測
+fn convert_to_wav_samples_with_mime<'a>(
+    audio_data: &'a [u8], 
+    mime_type: &'a str
+) -> Result<Vec<f32>, Box<dyn std::error::Error + 'a>> {
+    info!("開始音頻格式轉換，數據大小: {} bytes，MIME: {}", audio_data.len(), mime_type);
+    
+    // 使用統一音頻解碼器處理
+    match UnifiedAudioDecoder::decode_audio_with_mime(audio_data, mime_type) {
+        Ok(samples) => {
+            info!("音頻解碼成功：{} 樣本", samples.len());
+            
+            // 更新統計計數器
+            match AudioFormat::detect_from_mime(mime_type) {
+                AudioFormat::WebmOpus => WEBM_OPUS_COUNT.fetch_add(1, Ordering::Relaxed),
+                AudioFormat::OggOpus => WEBM_OPUS_COUNT.fetch_add(1, Ordering::Relaxed), // 統一計算 Opus
+                AudioFormat::Wav => WAV_COUNT.fetch_add(1, Ordering::Relaxed),
+                AudioFormat::WebmVorbis => WEBM_VORBIS_COUNT.fetch_add(1, Ordering::Relaxed),
+                _ => 0, // 其他格式不計數
+            };
+            
+            Ok(samples)
+        },
+        Err(e) => {
+            error!("統一音頻解碼器失敗: {}", e);
+            
+            // 如果新解碼器失敗，回退到舊方法
+            warn!("回退到舊的音頻解碼方法");
+            convert_to_wav_samples_legacy(audio_data)
+        }
+    }
+}
+
+// 舊版音頻轉換函數 (向後相容)
+fn convert_to_wav_samples_legacy(audio_data: &[u8]) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
+    info!("使用舊版音頻轉換方法");
     
     // 首先嘗試作為 WAV 文件讀取
     if let Ok(samples) = try_read_as_wav(audio_data) {
         info!("Successfully read as WAV format");
+        WAV_COUNT.fetch_add(1, Ordering::Relaxed);
         return Ok(samples);
     }
     
@@ -243,6 +295,7 @@ fn convert_to_wav_samples(audio_data: &[u8]) -> Result<Vec<f32>, Box<dyn std::er
     match try_decode_with_symphonia(audio_data) {
         Ok(samples) => {
             info!("Successfully decoded with symphonia");
+            WEBM_VORBIS_COUNT.fetch_add(1, Ordering::Relaxed);
             Ok(samples)
         },
         Err(e) => {
@@ -470,9 +523,41 @@ fn generate_simple_summary(transcript: &str) -> String {
 }
 
 async fn health_check() -> Json<serde_json::Value> {
+    // 取得音頻格式支援資訊
+    let format_support = UnifiedAudioDecoder::get_format_support_info();
+    let support_info: serde_json::Value = format_support
+        .into_iter()
+        .map(|(format, status)| {
+            serde_json::json!({
+                "format": format.friendly_name(),
+                "status": status
+            })
+        })
+        .collect::<Vec<_>>()
+        .into();
+
+    // 統計計數器
+    let stats = serde_json::json!({
+        "wav_processed": WAV_COUNT.load(Ordering::Relaxed),
+        "webm_opus_processed": WEBM_OPUS_COUNT.load(Ordering::Relaxed),
+        "webm_vorbis_processed": WEBM_VORBIS_COUNT.load(Ordering::Relaxed),
+        "conversion_success": CONVERSION_SUCCESS_COUNT.load(Ordering::Relaxed),
+        "conversion_failure": CONVERSION_FAILURE_COUNT.load(Ordering::Relaxed),
+    });
+
     Json(serde_json::json!({
         "status": "healthy",
-        "service": "Care Voice with whisper-rs",
-        "version": "1.0.0"
+        "service": "Care Voice with whisper-rs + Opus Support",
+        "version": "2.0.0",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "audio_formats": support_info,
+        "processing_stats": stats,
+        "enhancements": [
+            "✅ Opus 音頻解碼支援 (Chrome/Firefox/Edge)",
+            "✅ 智能格式檢測 (MIME + 二進制)",
+            "✅ 統一音頻解碼器架構",
+            "✅ 向後相容性保證",
+            "🔄 WebM 容器支援 (基礎版本)"
+        ]
     }))
 }
