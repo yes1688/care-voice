@@ -1,0 +1,61 @@
+# =======================================================
+# Care Voice 前端編譯階段
+# 目標: SolidJS + Vite 編譯產出 dist/
+# =======================================================
+FROM node:20-slim AS frontend-builder
+
+LABEL stage="frontend-build"
+LABEL version="1.0.0"
+LABEL description="Care Voice frontend build stage - SolidJS + Vite"
+
+WORKDIR /app
+
+# 安裝必要的系統工具
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 優化依賴安裝 (利用 Docker 快取層)
+COPY package.json package-lock.json ./
+
+# 安裝依賴 (僅生產依賴以加速)
+RUN npm ci --include=dev && \
+    echo "✅ 前端依賴安裝完成"
+
+# 複製源代碼和配置文件
+COPY src/ ./src/
+COPY index.html ./
+COPY vite.config.ts ./
+COPY tsconfig.json ./
+
+# 執行前端編譯
+RUN echo "🔧 開始編譯 SolidJS + Vite 前端..." && \
+    npm run build && \
+    echo "✅ 前端編譯完成"
+
+# 驗證編譯產出
+RUN ls -la dist/ && \
+    echo "📊 前端編譯產出大小:" && \
+    du -sh dist/ && \
+    echo "📁 編譯產出文件列表:" && \
+    find dist/ -type f
+
+# 優化產出 (移除不必要檔案)
+RUN echo "🧹 清理不必要檔案..." && \
+    rm -rf node_modules/.cache/ && \
+    rm -rf src/ && \
+    rm -f package*.json vite.config.ts tsconfig.json
+
+# 標記編譯完成狀態
+RUN echo "frontend-build-complete-$(date)" > /app/build-status && \
+    echo "✅ 前端編譯階段完成"
+
+# 健康檢查 - 驗證編譯產出存在
+HEALTHCHECK --interval=30s --timeout=5s --retries=2 \
+    CMD test -f /app/dist/index.html || exit 1
+
+# 設定工作目錄為產出目錄
+WORKDIR /app/dist
+
+# 預設命令 (通常不會執行，僅用於調試)
+CMD ["echo", "Frontend build completed. Files available in /app/dist/"]

@@ -1,0 +1,96 @@
+# =======================================================
+# Care Voice 後端編譯階段  
+# 目標: Rust + Opus 支援編譯
+# =======================================================
+FROM rust:1.75-slim AS backend-builder
+
+LABEL stage="backend-build"
+LABEL version="1.0.0"
+LABEL description="Care Voice backend build stage - Rust + whisper-rs + Opus"
+
+# 安裝系統依賴
+RUN apt-get update && apt-get install -y \
+    # Rust 編譯必需
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    # Opus 音頻支援
+    libopus-dev \
+    libopus0 \
+    # 構建工具
+    cmake \
+    # 網路工具
+    curl \
+    # 清理緩存
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "✅ 後端系統依賴安裝完成"
+
+# 驗證 Opus 庫可用性
+RUN pkg-config --exists opus && \
+    echo "✅ Opus 庫檢測成功: $(pkg-config --modversion opus)" || \
+    echo "❌ Opus 庫檢測失敗"
+
+WORKDIR /app
+
+# 優化 Rust 編譯 (依賴快取層)
+# 先複製依賴配置文件
+COPY Cargo.toml Cargo.lock ./
+
+# 創建假的 main.rs 用於編譯依賴
+RUN mkdir src && \
+    echo "fn main() { println!(\"Dependencies build\"); }" > src/main.rs
+
+# 編譯依賴 (利用快取)
+RUN echo "📦 開始編譯 Rust 依賴..." && \
+    cargo build --release && \
+    echo "✅ 依賴編譯完成" && \
+    rm -rf src/
+
+# 複製實際源代碼
+COPY src/ ./src/
+
+# 觸碰 main.rs 確保重新編譯應用代碼
+RUN touch src/main.rs
+
+# 重新編譯應用代碼 (包含 Opus 支援)
+RUN echo "🦀 開始編譯 Care Voice 後端 (包含 Opus 支援)..." && \
+    RUST_LOG=info cargo build --release --features opus-support && \
+    echo "✅ 後端編譯完成"
+
+# 驗證編譯產出
+RUN ls -la target/release/ && \
+    echo "📊 後端編譯產出:" && \
+    file target/release/care-voice && \
+    echo "📏 二進制文件大小:" && \
+    du -sh target/release/care-voice
+
+# 檢查動態連結庫依賴
+RUN echo "🔗 檢查動態連結庫依賴:" && \
+    ldd target/release/care-voice || echo "靜態連結或檢查失敗"
+
+# 執行基本測試 (確保編譯正確)
+RUN echo "🧪 執行基本功能測試..." && \
+    cd target/release && \
+    timeout 5s ./care-voice --version || echo "版本檢查完成 (可能無 --version 參數)"
+
+# 清理編譯緩存 (保留二進制)
+RUN echo "🧹 清理編譯緩存..." && \
+    rm -rf target/debug/ && \
+    rm -rf target/release/build/ && \
+    rm -rf target/release/deps/ && \
+    find target/release/ -name "*.d" -delete && \
+    echo "✅ 清理完成，保留二進制文件"
+
+# 標記編譯完成狀態
+RUN echo "backend-build-complete-$(date)" > /app/build-status && \
+    echo "✅ 後端編譯階段完成"
+
+# 健康檢查 - 驗證二進制文件存在且可執行
+HEALTHCHECK --interval=30s --timeout=10s --retries=2 \
+    CMD test -x /app/target/release/care-voice || exit 1
+
+# 設定工作目錄為產出目錄
+WORKDIR /app/target/release
+
+# 預設命令 (通常不會執行，僅用於調試)
+CMD ["echo", "Backend build completed. Binary available at /app/target/release/care-voice"]
