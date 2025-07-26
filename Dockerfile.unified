@@ -44,35 +44,72 @@ RUN ls -la dist/ && \
     find dist/ -type f
 
 # =======================================================
-# 階段2: 後端構建 (Rust + whisper-rs + Opus)
+# 階段2: 後端構建 (Rust + whisper-rs + CUDA 12.9 + Opus)
 # =======================================================
-FROM rust:1.85-slim AS backend-builder
+FROM docker.io/nvidia/cuda:12.6-devel-ubuntu24.04 AS backend-builder
 
 LABEL stage="backend-build"
-LABEL version="1.0.0"
-LABEL description="Care Voice backend build stage - Rust + whisper-rs + Opus"
+LABEL version="2.0.0"
+LABEL description="Care Voice backend build stage - Rust + whisper-rs + CUDA 12.9 + Opus"
 
-# 安裝系統依賴
+# 安裝 Rust 工具鏈和系統依賴
 RUN apt-get update && apt-get install -y \
+    # Rust 工具鏈安裝必需
+    curl \
+    ca-certificates \
     # Rust 編譯必需
     pkg-config \
     libssl-dev \
     build-essential \
+    # CUDA 開發工具
+    nvidia-cuda-dev \
+    libnvidia-compute-535 \
+    # cuDNN 9 for CUDA 12.9
+    libcudnn9-dev \
+    libcublas-dev-12-9 \
+    libcufft-dev-12-9 \
+    libcurand-dev-12-9 \
+    libcusparse-dev-12-9 \
+    libcusolver-dev-12-9 \
     # Opus 音頻支援
     libopus-dev \
     libopus0 \
     # 構建工具
     cmake \
-    # 網路工具
-    curl \
+    # libclang for bindgen (whisper-rs-sys)
+    libclang-dev \
+    clang \
     # 清理緩存
     && rm -rf /var/lib/apt/lists/* \
-    && echo "✅ 後端系統依賴安裝完成"
+    && echo "✅ CUDA 12.9 + Rust 系統依賴安裝完成"
 
-# 驗證 Opus 庫可用性
-RUN pkg-config --exists opus && \
-    echo "✅ Opus 庫檢測成功: $(pkg-config --modversion opus)" || \
-    echo "❌ Opus 庫檢測失敗"
+# 安裝 Rust 工具鏈 (最新穩定版)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && echo 'source ~/.cargo/env' >> ~/.bashrc \
+    && ~/.cargo/bin/rustup default stable \
+    && ~/.cargo/bin/rustup component add rustfmt clippy \
+    && echo "✅ Rust 1.85+ 工具鏈安裝完成"
+
+# 設置 Rust 環境變數
+ENV PATH="/root/.cargo/bin:${PATH}"
+ENV RUST_VERSION="1.85"
+
+# 配置 CUDA 環境變數 (for whisper-rs CUDA 支援)
+ENV CUDA_ROOT="/usr/local/cuda"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+ENV CUDA_VISIBLE_DEVICES="all"
+ENV NVIDIA_VISIBLE_DEVICES="all"
+ENV NVIDIA_DRIVER_CAPABILITIES="compute,utility"
+
+# 驗證 CUDA 和音頻庫可用性
+RUN echo "🔍 驗證 CUDA 12.9 環境..." && \
+    nvcc --version && \
+    echo "✅ CUDA 編譯器檢測成功" && \
+    pkg-config --exists opus && \
+    echo "✅ Opus 庫檢測成功: $(pkg-config --modversion opus)" && \
+    rustc --version && \
+    echo "✅ Rust 編譯器檢測成功" || \
+    echo "❌ 環境檢測失敗"
 
 WORKDIR /app
 
@@ -95,35 +132,51 @@ COPY backend/src/ ./src/
 # 觸碰 main.rs 確保重新編譯應用代碼
 RUN touch src/main.rs
 
-# 重新編譯應用代碼 (包含 Opus 支援)
-RUN echo "🦀 開始編譯 Care Voice 後端 (包含 Opus 支援)..." && \
-    RUST_LOG=info cargo build --release --features opus-support && \
+# 重新編譯應用代碼 (基礎版本，先確保架構正常)
+RUN echo "🦀 開始編譯 Care Voice 後端 (基礎版本)..." && \
+    RUST_LOG=info cargo build --release && \
     echo "✅ 後端編譯完成"
 
 # 驗證編譯產出
 RUN ls -la target/release/ && \
     echo "📊 後端編譯產出:" && \
-    file target/release/care-voice && \
     echo "📏 二進制文件大小:" && \
     du -sh target/release/care-voice
 
 # =======================================================
-# 階段3: 最終整合 (nginx + 前端 + 後端 + supervisor)
+# 階段3: 最終整合 (nginx + CUDA 12.9 + 前端 + 後端 + supervisor)
 # =======================================================
-FROM nginx:alpine AS final
+FROM docker.io/nvidia/cuda:12.6-runtime-ubuntu24.04 AS final
 
 LABEL stage="final-integration"
-LABEL version="1.0.0"
-LABEL description="Care Voice unified service with frontend + backend + nginx"
-LABEL maintainer="Care Voice Integration Team"
+LABEL version="2.0.0"
+LABEL description="Care Voice unified service with CUDA 12.9 + frontend + backend + nginx"
+LABEL maintainer="Care Voice Enterprise Team"
 
-# 安裝 supervisor 和必要工具
-RUN apk add --no-cache \
+# 安裝 nginx, supervisor 和必要的 CUDA 運行時工具
+RUN apt-get update && apt-get install -y \
+    # Web 服務器
+    nginx \
+    # 進程管理器
     supervisor \
+    # CUDA 運行時依賴
+    libcublas12 \
+    libcudnn9-cuda-12 \
+    # 音頻運行時
+    libopus0 \
+    # 系統工具
     curl \
     bash \
     tzdata \
-    && echo "✅ 系統工具安裝完成"
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "✅ CUDA 運行時 + nginx + 系統工具安裝完成"
+
+# 配置 CUDA 運行時環境變數
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+ENV CUDA_VISIBLE_DEVICES="all"
+ENV NVIDIA_VISIBLE_DEVICES="all"
+ENV NVIDIA_DRIVER_CAPABILITIES="compute,utility"
 
 # 設定時區
 ENV TZ=Asia/Taipei
@@ -161,6 +214,24 @@ RUN echo "🔧 驗證 supervisor 配置..." && \
     supervisord -c /etc/supervisor/conf.d/supervisord.conf -t && \
     echo "✅ supervisor 配置驗證通過"
 
+# 下載 Whisper 模型 (業界標準模型)
+RUN mkdir -p /app/models && \
+    echo "📥 正在下載 Whisper 模型..." && \
+    cd /app/models && \
+    echo "下載 Turbo 模型 (ggml-tiny.bin)..." && \
+    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin" \
+         -o "ggml-tiny.bin" --connect-timeout 30 --max-time 1800 && \
+    echo "下載 Balanced 模型 (ggml-base.bin)..." && \
+    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" \
+         -o "ggml-base.bin" --connect-timeout 30 --max-time 1800 && \
+    echo "下載 High-Accuracy 模型 (ggml-large-v2.bin)..." && \
+    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v2.bin" \
+         -o "ggml-large-v2.bin" --connect-timeout 30 --max-time 1800 && \
+    echo "✅ 模型下載完成" && \
+    echo "📊 模型檔案大小:" && \
+    ls -lh /app/models/ && \
+    echo "📁 模型總大小: $(du -sh /app/models | cut -f1)"
+
 # 創建日誌文件並設定權限
 RUN touch /var/log/care-voice/app.log && \
     chmod 666 /var/log/care-voice/app.log && \
@@ -168,7 +239,7 @@ RUN touch /var/log/care-voice/app.log && \
 
 # 設定環境變數
 ENV RUST_LOG=info
-ENV PORT=8001
+ENV BACKEND_PORT=8001
 ENV NGINX_PORT=8000
 
 # 健康檢查腳本

@@ -1,0 +1,438 @@
+# ===================================
+# Care Voice Enterprise - Kubernetes 部署配置
+# 企業級自動擴展 + GPU 資源管理
+# ===================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: care-voice-enterprise
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: enterprise
+    version: "0.3.0"
+    tier: production
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: care-voice
+      component: enterprise
+  template:
+    metadata:
+      labels:
+        app: care-voice
+        component: enterprise
+        version: "0.3.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # 安全配置
+      securityContext:
+        runAsNonRoot: false  # 需要 root 權限訪問 GPU
+        fsGroup: 2000
+      
+      # 節點選擇 (GPU 節點)
+      nodeSelector:
+        accelerator: nvidia-gpu
+        node-type: gpu-enabled
+      
+      # 容錯配置
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "gpu-node"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      
+      # Pod 反親和性 (分散到不同節點)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - care-voice
+              topologyKey: kubernetes.io/hostname
+      
+      # 初始化容器 (模型下載)
+      initContainers:
+      - name: model-downloader
+        image: curlimages/curl:8.6.0
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "📥 正在下載 Whisper 模型..."
+          mkdir -p /models
+          
+          # 下載多個模型以支援不同品質需求
+          models=(
+            "ggml-tiny.bin"
+            "ggml-base.bin"
+            "ggml-large-v2.bin"
+          )
+          
+          for model in "${models[@]}"; do
+            if [ ! -f "/models/$model" ]; then
+              echo "下載模型: $model"
+              curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$model" \
+                -o "/models/$model" --connect-timeout 30 --max-time 1800
+              echo "✅ 模型下載完成: $model"
+            else
+              echo "✅ 模型已存在: $model"
+            fi
+          done
+          
+          echo "🎉 所有模型下載完成"
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      
+      containers:
+      - name: care-voice-enterprise
+        image: localhost/care-voice-enterprise:0.3.0
+        imagePullPolicy: IfNotPresent
+        
+        # 端口配置
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: metrics
+          containerPort: 8080
+          protocol: TCP
+        
+        # 環境變數
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: BACKEND_PORT
+          value: "8001"
+        - name: NGINX_PORT
+          value: "8000"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        
+        # 資源需求
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+            nvidia.com/gpu: 1
+        
+        # 健康檢查
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 3
+          successThreshold: 1
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+        
+        # 啟動探針 (GPU 初始化可能需要更長時間)
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 12  # 2 分鐘
+          successThreshold: 1
+        
+        # 卷掛載
+        volumeMounts:
+        - name: model-storage
+          mountPath: /app/models
+          readOnly: true
+        - name: log-storage
+          mountPath: /var/log/care-voice
+        - name: tmp-storage
+          mountPath: /tmp
+        
+        # 安全配置
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false  # 需要寫入日誌
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - SYS_ADMIN  # GPU 訪問需要
+      
+      # 卷定義
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: care-voice-models-pvc
+      - name: log-storage
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: tmp-storage
+        emptyDir:
+          sizeLimit: 512Mi
+      
+      # DNS 配置
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+
+---
+# ===================================
+# PVC for Model Storage
+# ===================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: care-voice-models-pvc
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: storage
+spec:
+  accessModes:
+  - ReadWriteMany  # 多個 Pod 共享模型
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd  # 使用 SSD 存儲以提高模型載入速度
+
+---
+# ===================================
+# Service
+# ===================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: care-voice-enterprise-service
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: enterprise
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/nginx-status"
+spec:
+  type: ClusterIP
+  selector:
+    app: care-voice
+    component: enterprise
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+
+---
+# ===================================
+# HorizontalPodAutoscaler
+# ===================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: care-voice-enterprise-hpa
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: care-voice-enterprise
+  
+  minReplicas: 2
+  maxReplicas: 10
+  
+  # 擴展指標
+  metrics:
+  # GPU 利用率
+  - type: Resource
+    resource:
+      name: nvidia.com/gpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  
+  # CPU 利用率
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  
+  # 記憶體利用率
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 75
+  
+  # 自定義指標：轉錄請求速率
+  - type: Pods
+    pods:
+      metric:
+        name: transcription_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "5"
+  
+  # 擴展行為配置
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 120  # 2 分鐘穩定期
+      policies:
+      - type: Percent
+        value: 50  # 每次最多增加 50%
+        periodSeconds: 60
+      - type: Pods
+        value: 2   # 每次最多增加 2 個 Pod
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 分鐘穩定期
+      policies:
+      - type: Percent
+        value: 25  # 每次最多減少 25%
+        periodSeconds: 120
+      - type: Pods
+        value: 1   # 每次最多減少 1 個 Pod
+        periodSeconds: 120
+
+---
+# ===================================
+# VerticalPodAutoscaler (可選)
+# ===================================
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: care-voice-enterprise-vpa
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: care-voice-enterprise
+  
+  updatePolicy:
+    updateMode: "Auto"  # 自動調整資源
+  
+  resourcePolicy:
+    containerPolicies:
+    - containerName: care-voice-enterprise
+      maxAllowed:
+        memory: "16Gi"
+        cpu: "8"
+      minAllowed:
+        memory: "2Gi"
+        cpu: "1"
+      controlledResources:
+      - memory
+      - cpu
+
+---
+# ===================================
+# PodDisruptionBudget
+# ===================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: care-voice-enterprise-pdb
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: availability
+spec:
+  selector:
+    matchLabels:
+      app: care-voice
+      component: enterprise
+  minAvailable: 1  # 至少保持 1 個 Pod 運行
+
+---
+# ===================================
+# ServiceMonitor (Prometheus Operator)
+# ===================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: care-voice-enterprise-monitor
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: care-voice
+      component: enterprise
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+  - port: http
+    interval: 30s
+    path: /health
+    scheme: http

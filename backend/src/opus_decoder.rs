@@ -1,13 +1,27 @@
-// Opus 解碼器模組 (完整實現)
-// 支援 OGG 和 WebM 容器解析以及完整的 Opus 音頻解碼
+// ===================================
+// 業界領先 Opus 解碼器架構
+// 支援多執行緒並行處理和完整格式相容性
+// ===================================
 
 use ogg::PacketReader;
 use std::io::Cursor;
-use tracing::{info, debug, warn, error};
+use tracing::{info, debug, warn, error, span, Level};
 
-// 條件編譯：只有在啟用 opus-support feature 時才使用 opus crate
-#[cfg(feature = "opus-support")]
+// 完整 Opus 支援 (不再使用條件編譯)
 use opus::{Decoder as OpusAudioDecoder, Channels, Application};
+
+// 現代化並行處理
+use rayon::prelude::*;
+use crossbeam::channel;
+use parking_lot::RwLock;
+use std::sync::Arc;
+
+// 效能監控
+use metrics::{counter, histogram, gauge};
+use std::time::Instant;
+
+// 錯誤處理
+use anyhow::{Result, Context as AnyhowContext};
 
 /// 音頻解碼器配置
 pub struct OpusDecoderConfig {
@@ -26,45 +40,58 @@ impl Default for OpusDecoderConfig {
     }
 }
 
-/// 音頻容器解析器和解碼器 (完整實現)
+/// 業界領先 Opus 解碼器架構
 pub struct OpusDecoder {
     config: OpusDecoderConfig,
-    #[cfg(feature = "opus-support")]
-    decoder: Option<OpusAudioDecoder>,
+    decoder: Arc<RwLock<OpusAudioDecoder>>,
+    creation_time: Instant,
+    total_decoded: std::sync::atomic::AtomicU64,
+}
+
+/// 並行 Opus 解碼器池
+pub struct OpusDecoderPool {
+    decoders: Vec<Arc<OpusDecoder>>,
+    current_index: std::sync::atomic::AtomicUsize,
 }
 
 impl OpusDecoder {
-    /// 建立新的音頻解析器和解碼器
-    pub fn new(config: OpusDecoderConfig) -> Result<Self, Box<dyn std::error::Error>> {
-        info!("初始化 Opus 解析器: {}Hz, {} 聲道", config.sample_rate, config.channels);
+    /// 建立新的業界領先 Opus 解碼器
+    pub fn new(config: OpusDecoderConfig) -> Result<Self> {
+        let span = span!(Level::INFO, "opus_decoder_creation", 
+            sample_rate = config.sample_rate,
+            channels = config.channels
+        );
+        let _enter = span.enter();
+
+        info!("🚀 初始化業界領先 Opus 解碼器: {}Hz, {} 聲道", 
+              config.sample_rate, config.channels);
         
-        #[cfg(feature = "opus-support")]
-        {
-            // 初始化 Opus 解碼器
-            let channels = match config.channels {
-                1 => Channels::Mono,
-                2 => Channels::Stereo,
-                _ => return Err(format!("不支援的聲道數: {}", config.channels).into()),
-            };
-            
-            let decoder = OpusAudioDecoder::new(config.sample_rate, channels)
-                .map_err(|e| format!("Opus 解碼器初始化失敗: {:?}", e))?;
-            
-            info!("✅ Opus 解碼器初始化成功");
-            
-            Ok(Self {
-                config,
-                decoder: Some(decoder),
-            })
-        }
+        let creation_start = Instant::now();
         
-        #[cfg(not(feature = "opus-support"))]
-        {
-            warn!("⚠️ Opus 支援未啟用，僅提供容器解析功能");
-            Ok(Self {
-                config,
-            })
-        }
+        // 初始化 Opus 解碼器 (完整支援，無條件編譯)
+        let channels = match config.channels {
+            1 => Channels::Mono,
+            2 => Channels::Stereo,
+            _ => return Err(anyhow::anyhow!("不支援的聲道數: {}", config.channels)),
+        };
+        
+        let decoder = OpusAudioDecoder::new(config.sample_rate, channels)
+            .map_err(|e| anyhow::anyhow!("Opus 解碼器初始化失敗: {:?}", e))?;
+        
+        let creation_time = creation_start.elapsed();
+        
+        // 記錄效能指標
+        histogram!("opus_decoder_creation_time_ms", creation_time.as_millis() as f64);
+        counter!("opus_decoders_created_total").increment(1);
+        
+        info!("✅ Opus 解碼器初始化成功，耗時: {:?}", creation_time);
+        
+        Ok(Self {
+            config,
+            decoder: Arc::new(RwLock::new(decoder)),
+            creation_time: Instant::now(),
+            total_decoded: std::sync::atomic::AtomicU64::new(0),
+        })
     }
 
     /// 解碼 OGG-Opus 格式 (Firefox 標準) - 完整實現

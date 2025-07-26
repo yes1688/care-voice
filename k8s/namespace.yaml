@@ -1,0 +1,352 @@
+# ===================================
+# Care Voice Enterprise - Kubernetes 命名空間和 RBAC
+# 企業級安全和權限管理
+# ===================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: care-voice
+  labels:
+    name: care-voice
+    environment: production
+    team: ai-platform
+    cost-center: engineering
+  annotations:
+    description: "Care Voice Enterprise AI 語音轉錄服務"
+    contact: "care-voice-team@company.com"
+    version: "0.3.0"
+
+---
+# ===================================
+# ServiceAccount
+# ===================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: care-voice-service-account
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: security
+automountServiceAccountToken: true
+
+---
+# ===================================
+# ClusterRole
+# ===================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: care-voice-cluster-role
+  labels:
+    app: care-voice
+    component: security
+rules:
+# 基本 Pod 操作權限
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "pods/status"]
+  verbs: ["get", "list", "watch"]
+
+# 節點資源訪問 (GPU 監控)
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+
+# 指標訪問
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+
+# 自定義資源定義 (如果需要)
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch"]
+
+---
+# ===================================
+# Role (命名空間級別權限)
+# ===================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: care-voice-role
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: security
+rules:
+# ConfigMap 和 Secret 操作
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+# Service 操作
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+# PVC 操作
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+# Event 創建 (用於監控和調試)
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+
+# Deployment 和 ReplicaSet 操作
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+# HPA 操作
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+---
+# ===================================
+# ClusterRoleBinding
+# ===================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: care-voice-cluster-role-binding
+  labels:
+    app: care-voice
+    component: security
+subjects:
+- kind: ServiceAccount
+  name: care-voice-service-account
+  namespace: care-voice
+roleRef:
+  kind: ClusterRole
+  name: care-voice-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ===================================
+# RoleBinding
+# ===================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: care-voice-role-binding
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: security
+subjects:
+- kind: ServiceAccount
+  name: care-voice-service-account
+  namespace: care-voice
+roleRef:
+  kind: Role
+  name: care-voice-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ===================================
+# NetworkPolicy (安全網路隔離)
+# ===================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: care-voice-network-policy
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: care-voice
+  
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # 入站規則
+  ingress:
+  # 允許來自同命名空間的流量
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: care-voice
+  
+  # 允許來自 ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+  
+  # 允許來自 monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080  # metrics port
+  
+  # 允許健康檢查
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # 出站規則
+  egress:
+  # 允許 DNS 查詢
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # 允許 HTTPS 出站 (模型下載)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # 允許 Kubernetes API
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 6443
+  
+  # 允許同命名空間內部通信
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: care-voice
+
+---
+# ===================================
+# ResourceQuota (資源配額)
+# ===================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: care-voice-resource-quota
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: resource-management
+spec:
+  hard:
+    # 計算資源限制
+    requests.cpu: "20"
+    requests.memory: "40Gi"
+    requests.nvidia.com/gpu: "10"
+    limits.cpu: "40"
+    limits.memory: "80Gi"
+    limits.nvidia.com/gpu: "10"
+    
+    # 對象數量限制
+    pods: "20"
+    persistentvolumeclaims: "5"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+    
+    # 存儲限制
+    requests.storage: "100Gi"
+
+---
+# ===================================
+# LimitRange (預設資源限制)
+# ===================================
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: care-voice-limit-range
+  namespace: care-voice
+  labels:
+    app: care-voice
+    component: resource-management
+spec:
+  limits:
+  # Container 限制
+  - type: Container
+    default:
+      cpu: "2"
+      memory: "4Gi"
+    defaultRequest:
+      cpu: "500m"
+      memory: "1Gi"
+    max:
+      cpu: "8"
+      memory: "16Gi"
+      nvidia.com/gpu: "2"
+    min:
+      cpu: "100m"
+      memory: "256Mi"
+  
+  # Pod 限制
+  - type: Pod
+    max:
+      cpu: "8"
+      memory: "16Gi"
+      nvidia.com/gpu: "2"
+    min:
+      cpu: "100m"
+      memory: "256Mi"
+  
+  # PVC 限制
+  - type: PersistentVolumeClaim
+    max:
+      storage: "50Gi"
+    min:
+      storage: "1Gi"
+
+---
+# ===================================
+# PodSecurityPolicy (如果集群啟用了 PSP)
+# ===================================
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: care-voice-psp
+  labels:
+    app: care-voice
+    component: security
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  
+  # 所需的安全上下文
+  requiredDropCapabilities:
+  - ALL
+  allowedCapabilities:
+  - SYS_ADMIN  # GPU 訪問需要
+  
+  # 卷類型
+  volumes:
+  - configMap
+  - emptyDir
+  - projected
+  - secret
+  - downwardAPI
+  - persistentVolumeClaim
+  
+  # 主機配置
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  
+  # 運行用戶
+  runAsUser:
+    rule: MustRunAsNonRoot
+  
+  # SELinux
+  seLinux:
+    rule: RunAsAny
+  
+  # 文件系統組
+  fsGroup:
+    rule: RunAsAny

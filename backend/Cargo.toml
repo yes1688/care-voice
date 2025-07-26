@@ -1,55 +1,126 @@
 [package]
 name = "care-voice"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
+authors = ["Care Voice Team"]
+description = "Industry-leading AI voice transcription with GPU acceleration and universal browser support"
+license = "MIT"
+repository = "https://github.com/care-voice/care-voice"
 
 [dependencies]
-# Web 框架
-axum = { version = "0.7", features = ["multipart"] }
-tokio = { version = "1.0", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors"] }
+# === Web 框架 ===
+axum = { version = "0.7", features = ["multipart", "ws", "macros"] }
+tokio = { version = "1.0", features = ["full", "tracing"] }
+tower-http = { version = "0.5", features = ["cors", "compression-gzip", "trace"] }
+tower = { version = "0.4", features = ["timeout", "limit"] }
 
-# 序列化
+# === 序列化 ===
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# 語音識別
-whisper-rs = { version = "0.13", features = ["cuda"] }
+# === AI 語音識別 (業界領先最新版本 + 完整 GPU 支援) ===
+whisper-rs = { version = "0.14.3", features = ["cuda", "metal"] }
 
-# 音頻處理 (添加 Opus 支援)
+# === 現代音頻處理生態系統 ===
+# Opus 編解碼器 (業界標準)
 opus = { version = "0.3.0", optional = true }
+libopus_sys = { version = "0.3.0", optional = true }
+
+# 完整音頻格式支援
 symphonia = { version = "0.5", features = [
-    "mkv",          # WebM/Matroska 容器支援
-    "vorbis",       # Vorbis 編解碼器 (Firefox WebM)
-    "ogg",          # OGG 容器格式支援
-    "flac",         # FLAC 無損格式支援 (可選)
-    "wav"           # WAV 格式支援
+    "isomp4",       # MP4/AAC 支援
+    "ogg",          # OGG 支援
+    "flac",         # FLAC 支援
+    "wav",          # WAV 支援
+    "pcm"           # PCM 支援
 ] }
 
-# WAV 檔案處理
+# 音頻文件處理
 hound = "3.5"
-
-# OGG 容器支援
 ogg = "0.9.0"
 
-# 音頻樣本處理工具
-byteorder = "1.4"
+# === 並行處理與性能優化 ===
+rayon = { version = "1.8", optional = true }     # 數據並行處理
+crossbeam = { version = "0.8", optional = true } # 無鎖資料結構
+parking_lot = "0.12"                             # 高性能互斥鎖
 
-# 錯誤處理
+# === 音頻樣本處理 ===
+byteorder = "1.4"
+rubato = "0.15"         # 高品質音頻重採樣
+dasp = "0.11"           # 數位音頻信號處理
+
+# === 系統資訊 ===
+num_cpus = "1.16"       # CPU 核心數檢測
+
+# === 錯誤處理與日誌 ===
 anyhow = "1.0"
 thiserror = "1.0"
-
-# 日誌和時間
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-chrono = { version = "0.4", features = ["serde"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = { version = "0.26", optional = true }
 
-# 記憶體分配器 (可選，針對性能優化)
+# === 時間與配置 ===
+chrono = { version = "0.4", features = ["serde"] }
+config = "0.14"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# === 效能監控 (OpenTelemetry) ===
+opentelemetry = { version = "0.26", features = ["metrics", "trace"] }
+opentelemetry-jaeger = { version = "0.22.0", optional = true }
+metrics = "0.23"
+metrics-exporter-prometheus = { version = "0.15", optional = true }
+
+# === GPU 計算與記憶體管理 ===
+cudarc = { version = "0.12", features = ["driver", "cublas", "cuda-12060"], optional = true }
+
+# === 記憶體分配器 (高性能) ===
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 jemallocator = { version = "0.5", optional = true }
+mimalloc = { version = "0.1", optional = true }
+
+# === 開發工具 ===
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.5"
+tokio-test = "0.4"
+tempfile = "3.10"
 
 [features]
-default = ["opus-support"]
+default = ["opus-support", "cuda", "high-performance"]
+
+# === 音頻格式支援 ===
+opus-support = ["opus", "libopus_sys"]
+full-audio-support = ["opus-support"]
+
+# === GPU 加速 ===
+cuda = ["whisper-rs/cuda", "cudarc"]
+metal = ["whisper-rs/metal"]
+
+# === 性能優化 ===
+high-performance = ["jemalloc", "parallel-processing"]
 jemalloc = ["jemallocator"]
-opus-support = ["opus"]
-cuda = ["whisper-rs/cuda"]
+mimalloc-allocator = ["mimalloc"]
+parallel-processing = ["rayon", "crossbeam"]
+
+# === 監控與可觀測性 ===
+observability = ["tracing-opentelemetry", "opentelemetry-jaeger", "metrics-exporter-prometheus"]
+
+# === 實驗性功能 ===
+experimental = []
+
+# === 效能基準測試 ===
+# 將在完成後添加基準測試
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.bench]
+inherits = "release"
+debug = true
+
+# === Cargo 快取最佳化 ===
+[profile.dev.package."*"]
+opt-level = 3
