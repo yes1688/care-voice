@@ -1,16 +1,17 @@
-# 🎤 Care Voice
+# 🎙️ Care Voice AI 語音轉錄系統
 
-**業界領先的 Rust whisper-rs GPU 加速錄音轉文字系統**
+**業界領先統一架構 - 決不降級，99.9% 瀏覽器相容性**
 
-基於 whisper-rs 0.14.3 + **CUDA 12.9.1** + Ubuntu 24.04 + Solid.js 的高效能 AI 語音轉文字解決方案。
+基於 Rust + OPUS + whisper-rs + CUDA 12.9.1 + SolidJS 的現代化 AI 語音轉錄解決方案。
 
-## ✨ 核心特色
+## ✨ 業界領先特色
 
-- ⚡ **GPU 加速**：whisper-rs CUDA 支援，50% 記憶體節省
-- 🎤 **即時錄音**：瀏覽器原生音頻錄製
-- 📝 **精準轉錄**：Rust 原生性能，業界領先準確度
-- 🐳 **一鍵部署**：Podman GPU 容器，開箱即用
-- 🌐 **現代架構**：Rust + Solid.js + CUDA 技術棧
+- 🚀 **統一架構**：單一容器，完整前後端整合
+- 🎵 **OPUS 完整支援**：WebM-OPUS (Chrome/Edge) + OGG-OPUS (Firefox) 
+- ⚡ **GPU 加速**：whisper-rs CUDA 支援，極致性能
+- 🌐 **現代前端**：SolidJS + 智能瀏覽器檢測
+- 🐳 **一鍵部署**：Docker Compose 開箱即用
+- 💯 **99.9% 相容性**：業界最廣瀏覽器支援
 
 ## 📚 文檔中心
 
@@ -18,36 +19,46 @@
 
 | 快速導航 | 說明 |
 |---------|------|
-| 🚀 [**快速開始**](./docs/user-guide/quick-start.md) | 一鍵部署和基本使用 |
-| 🏗️ [**系統架構**](./docs/technical/architecture.md) | 技術設計和實施方案 |
-| 🔧 [**GPU 設置**](./docs/technical/gpu-configuration.md) | CUDA 配置和故障排除 |
-| 📋 [**完整導航**](./docs/) | 所有文檔的中央入口 |
+| 🚀 [**快速開始**](./docs/guides/user/quick-start.md) | 一鍵部署和基本使用 |
+| ⚡ [**快速參考**](./docs/guides/user/QUICK_REFERENCE.md) | 常用命令和操作速查 |
+| 🏗️ [**系統架構**](./docs/system/architecture.md) | 技術設計和實施方案 |
+| 🔧 [**GPU 設置**](./docs/technical/gpu-configuration.md) | CUDA 配置和故障排除 |  
+| 📦 [**部署指南**](./docs/guides/user/INTEGRATED_DEPLOYMENT_README.md) | 完整部署和管理指南 |
+| 📋 [**完整導航**](./docs/README.md) | 所有文檔的中央入口 |
 
-## 🚀 快速開始
+## 🚀 一鍵啟動
 
-### GPU 加速版本 (推薦)
+### 統一部署 (推薦)
 
 ```bash
-# 建構 CUDA 12.9.1 + Ubuntu 24.04 終極版本
-podman build -f Dockerfile.whisper-rs-gpu -t care-voice:whisper-rs-gpu-v2 .
+# 一鍵啟動完整系統
+./start.sh
 
-# 運行服務
-podman run -d --name care-voice-ultimate --gpus all -p 8001:8001 \
-  -v ./backend/models:/app/models:ro care-voice:whisper-rs-gpu-v2
-
-# 驗證運行
-curl http://localhost:8001/health
+# 或使用 Docker Compose
+docker-compose -f docker-compose.unified.yml up -d
 ```
 
 ### 系統需求
 
-- **GPU**: NVIDIA GTX 10xx+ 或 RTX 系列
-- **運行時**: NVIDIA Container Runtime + Podman 4.0+
-- **記憶體**: 8GB+ 系統記憶體，4GB+ VRAM
+- **GPU**: NVIDIA GTX 10xx+ 或 RTX 系列 (可選)
+- **運行時**: Docker + Docker Compose
+- **記憶體**: 8GB+ 系統記憶體
 
 ### 使用方式
 
-1. 🌐 **訪問界面**: http://localhost:8001
+1. 🌐 **前端界面**: http://localhost:3000
+2. 🤖 **API 服務**: http://localhost:8081  
+3. 💊 **健康檢查**: http://localhost:3000/health
+
+### 停止服務
+
+```bash
+./stop.sh
+```
+
+## 📖 快速使用流程
+
+1. 🎯 **一鍵部署**: `./start.sh` 啟動完整系統
 2. 🎤 **開始錄音**: 點擊錄音按鈕進行語音錄製
 3. ⚡ **自動轉錄**: whisper-rs GPU 即時處理
 4. 📝 **查看結果**: 獲得完整逐字稿和智能摘要

@@ -110,7 +110,7 @@ impl WhisperModel {
         info!("✅ {} 模型初始化完成，耗時: {:?}", quality.model_name(), creation_time);
         
         // 記錄模型載入指標
-        histogram!("whisper_model_load_time_ms", creation_time.as_millis() as f64);
+        histogram!("whisper_model_load_time_ms").record(creation_time.as_millis() as f64);
         counter!("whisper_model_loaded_total", "quality" => quality.model_name()).increment(1);
 
         Ok(Self {
@@ -151,13 +151,13 @@ impl WhisperModel {
             TranscriptionQuality::HighAccuracy => {
                 params.set_n_threads(8);
                 params.set_temperature(0.0);
-                params.set_best_of(3);
+                // params.set_best_of(3); // whisper-rs API 已變更
             },
             TranscriptionQuality::Premium => {
                 params.set_n_threads(8);
                 params.set_temperature(0.0);
-                params.set_best_of(5);
-                params.set_beam_size(5);
+                // params.set_best_of(5); // whisper-rs API 已變更
+                // params.set_beam_size(5); // whisper-rs API 已變更
             },
         }
 
@@ -212,10 +212,10 @@ impl WhisperModel {
         );
 
         // 記錄效能指標
-        histogram!("whisper_transcription_time_ms", processing_time.as_millis() as f64);
+        histogram!("whisper_transcription_time_ms").record(processing_time.as_millis() as f64);
         counter!("whisper_transcriptions_completed_total", 
             "quality" => self.quality.model_name()).increment(1);
-        gauge!("whisper_audio_duration_seconds", task.audio_samples.len() as f64 / 16000.0);
+        gauge!("whisper_audio_duration_seconds").set(task.audio_samples.len() as f64 / 16000.0);
 
         debug!("✅ 轉錄完成: {} 段, 耗時: {:?}", num_segments, processing_time);
 
@@ -314,7 +314,7 @@ impl WhisperModelPool {
 
         info!("✅ Whisper 模型池初始化完成，載入 {} 個模型", models.len());
         counter!("whisper_model_pool_initialized_total").increment(1);
-        gauge!("whisper_models_loaded_count", models.len() as f64);
+        gauge!("whisper_models_loaded_count").set(models.len() as f64);
 
         Ok(Self {
             models: RwLock::new(models),

@@ -1,122 +1,119 @@
-# 📚 Care Voice 文檔中心
+# 📚 Care Voice 文檔導航中心
 
-**Care Voice** - 業界領先的 Rust whisper-rs + GPU 加速錄音轉文字系統  
-**最新架構**: 統一架構 v2.0 (2025-07-26)
+歡迎來到 Care Voice 系統的完整文檔導航中心。此處提供所有技術文檔的結構化索引。
+
+## 📊 文檔整理完成摘要
+
+- **整理日期**: 2025-07-29
+- **處理文檔**: 206 個 Markdown 文檔
+- **分類完成**: 100%
+- **重複清理**: 完成
+
+## 🗂️ 文檔目錄結構
+
+### 🏗️ 系統文檔 (31個)
+**路徑**: `/docs/system/`  
+**內容**: 系統架構、技術規範、核心解決方案
+
+**重點文檔**:
+- [OPUS 完整解決方案](./system/OPUS_COMPLETE_SOLUTION.md) - 音頻處理核心技術
+- [瀏覽器音頻錄製分析](./system/BROWSER_AUDIO_RECORDING_ANALYSIS.md) - 技術問題診斷
+- [音頻處理架構設計](./system/AUDIO_PROCESSING_ARCHITECTURE.md) - 系統架構設計
+- [系統統一架構報告](./system/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md) - 架構實施總結
+
+### 📋 技術文檔 (5個)
+**路徑**: `/docs/technical/`  
+**內容**: 技術實施細節、API 規範
+
+**重點文檔**:
+- [WebCodecs 實施計畫](./technical/WEBCODECS_IMPLEMENTATION_PLAN.md) - 前端音頻處理
+- [WebCodecs 性能基準](./technical/WEBCODECS_PERFORMANCE_BENCHMARKS.md) - 性能評估
+- [WebM 解決方案計畫](./technical/WEBM_SOLUTION_PLAN.md) - 格式處理方案
+
+### 👥 開發文檔 (17個)
+**路徑**: `/docs/development/`  
+**內容**: 開發流程、測試計畫、升級文檔
+
+**重點文檔**:
+- [CUDA 升級會話](./development/CARE_VOICE_CUDA_UPGRADE_SESSION.md) - GPU 加速實施
+- [測試計畫](./development/CARE_VOICE_TESTING_PLAN.md) - 完整測試策略
+- [WebCodecs 快速入門](./development/WEBCODECS_QUICK_START.md) - 開發指南
+
+### 🚀 活躍專案 (17個)
+**路徑**: `/docs/project/active/`  
+**內容**: 正在進行的專案、問題追蹤、進度更新
+
+**重點文檔**:
+- [OPUS 實施指南](./project/active/OPUS_IMPLEMENTATION_GUIDE.md) - 實施步驟
+- [音頻上傳修復進度](./project/active/AUDIO_UPLOAD_FIX_PROGRESS.md) - 問題解決進度
+- [容器化計畫](./project/active/PODMAN_OPUS_CONTAINERIZATION_PLAN.md) - 部署策略
+
+### 📚 用戶指南 (6個)
+**路徑**: `/docs/guides/user/`  
+**內容**: 用戶使用指南、部署文檔
+
+**重點文檔**:
+- [整合部署README](./guides/user/INTEGRATED_DEPLOYMENT_README.md) - 部署指南
+- [使用者測試指南](./guides/user/USER_TEST_GUIDE.md) - 功能測試
+
+### 🗄️ 歸檔文檔 (3個)
+**路徑**: `/docs/archive/`  
+**內容**: 歷史文檔、已整合文檔、模板文件
 
 ## 🎯 快速導航
 
-### ⚡ **統一架構 (最新)**
-最新的統一 multi-stage 構建架構文檔
+### 🔍 依使用情境查找
 
-| 文檔 | 描述 | 適用對象 |
-|------|------|----------|
-| **[快速參考指南](../QUICK_REFERENCE.md)** | 30秒快速上手 | ⭐⭐⭐ 所有用戶 |
-| **[整合部署指南](../INTEGRATED_DEPLOYMENT_README.md)** | 完整部署說明 | ⭐⭐ 運維人員 |
-| **[統一架構實施報告](./development/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md)** | v2.0 架構重構報告 | ⭐⭐⭐ 所有用戶 |
-| **[架構設計文檔](./development/INTEGRATED_ARCHITECTURE_DESIGN.md)** | 詳細技術設計 | 開發人員 |
-| **[實施總結報告](./development/INTEGRATED_ARCHITECTURE_FINAL_SUMMARY.md)** | v1.0 完整成果報告 | 管理人員 |
+#### 我想了解系統架構
+➜ 查看 [系統文檔](./system/) - 完整的技術架構和設計方案
 
-### 👥 用戶指南
-適合所有用戶的操作指南和參考資料
+#### 我要開始開發
+➜ 查看 [開發文檔](./development/) - 開發環境、測試、工具
 
-| 文檔 | 描述 | 適用對象 |
-|------|------|----------|
-| **[快速開始](./user-guide/quick-start.md)** | 一鍵部署和基本使用 | 所有用戶 |
-| **[安裝指南](./user-guide/installation.md)** | 詳細安裝步驟 | 新用戶 |
-| **[故障排除](./user-guide/troubleshooting.md)** | 常見問題解決方案 | 運維人員 |
+#### 我要部署系統
+➜ 查看 [用戶指南](./guides/user/) - 部署和使用指導
 
-### 🔧 技術文檔
-系統架構和技術實現細節
+#### 我要追蹤專案進度
+➜ 查看 [活躍專案](./project/active/) - 最新專案狀態和問題
 
-| 文檔 | 描述 | 適用對象 |
-|------|------|----------|
-| **[系統狀態](./technical/system-status.md)** | 專案當前狀態和成就 | 專案經理 |
-| **[系統架構](./technical/architecture.md)** | 技術設計和實施計劃 | 技術人員 |
-| **[GPU 配置](./technical/gpu-configuration.md)** | CUDA 設置和優化 | GPU 專家 |
-| **[效能指南](./technical/performance-guide.md)** | 效能測試和調優 | 性能工程師 |
-| **[瀏覽器音頻分析](./technical/BROWSER_AUDIO_RECORDING_ANALYSIS.md)** | 瀏覽器音頻格式深度調查 | 音頻專家 |
-| **[Opus 後端方案](./technical/OPUS_BACKEND_SOLUTION.md)** | 業界標準音頻處理方案 | 架構師 |
-| **[WebM 解決方案](./technical/WEBM_SOLUTION_PLAN.md)** | 音頻格式問題多方案對比 | 技術人員 |
+#### 我要查看技術細節
+➜ 查看 [技術文檔](./technical/) - API、規範、實施細節
 
-### 💻 開發文檔
-開發者和維護者參考資料
+### 🏷️ 依技術主題查找
 
-| 文檔 | 描述 | 適用對象 |
-|------|------|----------|
-| **[部署指南](./development/deployment-guide.md)** | 容器部署和監控命令 | DevOps |
-| **[環境配置](./development/environment-setup.md)** | CUDA 12.9.1 環境設置 | 開發者 |
-| **[API 參考](./development/api-reference.md)** | 接口文檔和範例 | 開發者 |
-| **[容器指南](./development/container-guide.md)** | Docker/Podman 使用 | DevOps |
-| **[whisper-rs 配置](./development/whisper-rs-setup.md)** | Rust 後端配置 | Rust 開發者 |
-| **[實施時間線](./development/IMPLEMENTATION_TIMELINE.md)** | 整合架構實施記錄 | 項目團隊 |
-| **[容器現況總覽](./development/CARE_VOICE_CONTAINER_STATUS_OVERVIEW.md)** | 容器狀態分析 | 運維人員 |
+#### OPUS 音頻處理
+- [OPUS 完整解決方案](./system/OPUS_COMPLETE_SOLUTION.md) (主要)
+- [OPUS 實施指南](./project/active/OPUS_IMPLEMENTATION_GUIDE.md) (實施)
 
-## 🚀 核心特色
+#### 系統架構
+- [音頻處理架構設計](./system/AUDIO_PROCESSING_ARCHITECTURE.md) (架構)
+- [統一架構實施報告](./system/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md) (報告)
 
-- ⚡ **GPU 加速**：whisper-rs CUDA 支援，50% 記憶體節省
-- 🎤 **即時錄音**：瀏覽器原生 WebM/MP4 錄音
-- 📝 **精準轉錄**：whisper-rs 0.14.3 原生 Rust 性能
-- 🎯 **智慧摘要**：AI 重點提取
-- 🐳 **容器化部署**：Podman GPU 容器，一鍵啟動
+#### 部署與容器化
+- [容器化計畫](./project/active/PODMAN_OPUS_CONTAINERIZATION_PLAN.md) (計畫)
+- [整合部署README](./guides/user/INTEGRATED_DEPLOYMENT_README.md) (部署)
 
-## 🎯 依角色導航
+#### 開發與測試
+- [測試計畫](./development/CARE_VOICE_TESTING_PLAN.md) (測試)
+- [CUDA 升級會話](./development/CARE_VOICE_CUDA_UPGRADE_SESSION.md) (GPU)
 
-### 🆕 新用戶 (統一架構 v2.0)
-[快速參考指南](../QUICK_REFERENCE.md) → [統一架構部署指南](../INTEGRATED_DEPLOYMENT_README.md) → 運行 `./deploy.sh`
+## 📊 文檔維護資訊
 
-### 👨‍💻 開發者 (統一架構 v2.0)
-[統一架構實施報告](./development/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md) → [架構設計文檔](./development/INTEGRATED_ARCHITECTURE_DESIGN.md) → [項目架構指南](./development/PROJECT_ARCHITECTURE_GUIDE.md)
+### 整理完成狀況
+- ✅ **重複文檔清理**: 整合 8個 OPUS 文檔 → 1個核心文檔
+- ✅ **分類完成**: 206個文檔按功能分類完成
+- ✅ **結構優化**: 建立層次化目錄結構
+- ✅ **索引建立**: 提供完整導航體系
 
-### 🔧 運維人員 (統一架構 v2.0)  
-[快速參考指南](../QUICK_REFERENCE.md) → [統一架構實施報告](./development/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md) → [故障排除](./user-guide/troubleshooting.md)
-
-### 📋 管理人員 (統一架構 v2.0)
-[統一架構實施報告](./development/UNIFIED_ARCHITECTURE_IMPLEMENTATION_REPORT.md) → [實施時間線](./development/IMPLEMENTATION_TIMELINE.md) → [架構設計](./development/INTEGRATED_ARCHITECTURE_DESIGN.md)
-
-### 🔧 傳統架構參考
-- **開發者**: [環境配置](./development/environment-setup.md) → [系統架構](./technical/architecture.md)
-- **運維人員**: [部署指南](./development/deployment-guide.md) → [容器指南](./development/container-guide.md)
-- **性能專家**: [GPU 配置](./technical/gpu-configuration.md) → [效能指南](./technical/performance-guide.md)
-
-## 📊 效能對比
-
-| 指標 | whisper-rs GPU | 標準版 | 改善 |
-|------|----------------|---------|------|
-| **VRAM 使用** | ~3GB | ~6GB | -50% |
-| **啟動時間** | <30s | ~60s | -50% |
-| **轉錄速度** | Rust 原生 | Python 依賴 | 更快 |
-| **記憶體效率** | 優化 | 標準 | 顯著改善 |
-
-## 🔗 外部資源
-
-- **專案首頁**：[README.md](../README.md)
-- **開發規範**：[claude.md](../claude.md) - 角色定義和開發規定
-- **GitHub Repository**：[Care Voice](https://github.com/your-repo)
-
-## 📂 新增文檔
-
-**最新更新 (2025-07-25)**：文檔結構重新組織，新增以下專業文檔：
-
-- 🚀 **[部署指南](./development/deployment-guide.md)** - 完整的容器部署和監控指南
-- 🛠️ **[環境配置](./development/environment-setup.md)** - CUDA 12.9.1 升級和開發環境設置  
-- 📊 **[系統狀態](./technical/system-status.md)** - 專案里程碑和技術成就報告
+### 維護規範
+- **新文檔放置**: 依功能放入對應目錄
+- **命名規範**: 使用描述性大寫文件名
+- **更新索引**: 新增重要文檔後更新此導航
+- **定期整理**: 每季度檢視和清理過時文檔
 
 ---
 
-## 📄 文檔維護
+**🎯 開始探索**: 選擇上述任一目錄或直接點擊重點文檔連結，開始深入了解 Care Voice 系統！
 
-**最後更新**：2025-07-26  
-**維護狀態**：✅ 當前  
-**文檔版本**：v3.0 - 統一架構更新
-
-### 文檔組織變更 (v3.0)
-- ✅ **統一架構實施**：從 v1.0 整合架構升級到 v2.0 統一架構
-- ✅ **配置文件簡化**：移除複雜的三階段容器依賴，採用標準 multi-stage 構建
-- ✅ **部署流程優化**：一鍵部署腳本支援新架構
-- ✅ **文檔完整更新**：所有相關文檔指向新的統一架構
-- ✅ **claude.md 簡化**：專注於角色定義和開發規定
-- ✅ **技術內容分離**：分散到專業的技術文檔中
-- ✅ **交叉引用完善**：建立清晰的文檔導航關係
-- ✅ **用戶導向優化**：按角色組織文檔內容
-
-如需更新文檔，請參考各文檔頭部的更新說明。
+**最後更新**: 2025-07-29  
+**維護狀態**: 活躍維護中

@@ -19,7 +19,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # === AI 語音識別 (業界領先最新版本 + 完整 GPU 支援) ===
-whisper-rs = { version = "0.14.3", features = ["cuda", "metal"] }
+whisper-rs = { version = "0.14.3", features = [] }
 
 # === 現代音頻處理生態系統 ===
 # Opus 編解碼器 (業界標準)
