@@ -28,9 +28,11 @@ pub enum TranscriptionQuality {
     Turbo,
     /// 平衡處理 (0.1x 實時) - 適用於一般應用
     Balanced,
+    /// 企業級品質 (0.15x 實時) - 適用於中文優化
+    Medium,
     /// 高精度處理 (0.2x 實時) - 適用於關鍵應用
     HighAccuracy,
-    /// 最高品質 (0.3x 實時) - 適用於專業應用
+    /// 業界領先品質 (0.25x 實時) - 多語言最佳準確度
     Premium,
 }
 
@@ -39,6 +41,7 @@ impl TranscriptionQuality {
         match self {
             Self::Turbo => "ggml-tiny.bin",
             Self::Balanced => "ggml-base.bin", 
+            Self::Medium => "ggml-medium.bin",
             Self::HighAccuracy => "ggml-large-v2.bin",
             Self::Premium => "ggml-large-v3.bin",
         }
@@ -48,9 +51,20 @@ impl TranscriptionQuality {
         match self {
             Self::Turbo => 50,
             Self::Balanced => 100,
+            Self::Medium => 150,
             Self::HighAccuracy => 200,
-            Self::Premium => 300,
+            Self::Premium => 250,
         }
+    }
+
+    /// 判斷是否適合中文語音轉錄
+    pub fn is_chinese_optimized(&self) -> bool {
+        matches!(self, Self::Medium | Self::Premium)
+    }
+
+    /// 判斷是否適合台語轉錄
+    pub fn is_taiwanese_capable(&self) -> bool {
+        matches!(self, Self::Premium)
     }
 }
 
@@ -148,6 +162,12 @@ impl WhisperModel {
                 params.set_print_special(false);
                 params.set_print_progress(false);
             },
+            TranscriptionQuality::Medium => {
+                params.set_n_threads(8);
+                params.set_temperature(0.1);  // 中文優化：適度降低溫度
+                params.set_print_special(false);
+                params.set_print_progress(false);
+            },
             TranscriptionQuality::HighAccuracy => {
                 params.set_n_threads(8);
                 params.set_temperature(0.0);
@@ -155,7 +175,7 @@ impl WhisperModel {
             },
             TranscriptionQuality::Premium => {
                 params.set_n_threads(8);
-                params.set_temperature(0.0);
+                params.set_temperature(0.0);  // 最佳準確度
                 // params.set_best_of(5); // whisper-rs API 已變更
                 // params.set_beam_size(5); // whisper-rs API 已變更
             },
@@ -276,7 +296,8 @@ impl WhisperModelPool {
         for quality in [
             TranscriptionQuality::Turbo,
             TranscriptionQuality::Balanced,
-            TranscriptionQuality::HighAccuracy,
+            TranscriptionQuality::Medium,
+            TranscriptionQuality::Premium,
         ] {
             let model_path = format!("{}/{}", model_base_path, quality.model_name());
             
@@ -356,12 +377,15 @@ impl WhisperModelPool {
                             if let Some(model) = models_guard.get(&task.quality) {
                                 model.clone()
                             } else {
-                                // 回退到可用的模型
-                                if let Some(model) = models_guard.get(&TranscriptionQuality::Balanced) {
+                                // 智能回退：優先選擇中文優化模型
+                                if let Some(model) = models_guard.get(&TranscriptionQuality::Medium) {
+                                    warn!("所請求的品質 {:?} 不可用，回退到 Medium (中文優化)", task.quality);
+                                    model.clone()
+                                } else if let Some(model) = models_guard.get(&TranscriptionQuality::Balanced) {
                                     warn!("所請求的品質 {:?} 不可用，回退到 Balanced", task.quality);
                                     model.clone()
                                 } else if let Some((_, model)) = models_guard.iter().next() {
-                                    warn!("Balanced 模型不可用，使用第一個可用模型");
+                                    warn!("推薦模型不可用，使用第一個可用模型");
                                     model.clone()
                                 } else {
                                     error!("沒有可用的模型");
@@ -459,20 +483,50 @@ impl WhisperModelPool {
             if target <= 100 {
                 TranscriptionQuality::Turbo
             } else if target <= 200 {
-                TranscriptionQuality::Balanced
+                TranscriptionQuality::Medium
             } else {
-                TranscriptionQuality::HighAccuracy
+                TranscriptionQuality::Premium
             }
         } else if audio_duration_ms <= 5000 {
             TranscriptionQuality::Turbo
         } else if audio_duration_ms <= 30000 {
-            TranscriptionQuality::Balanced
+            TranscriptionQuality::Medium  // 優先使用中文優化模型
         } else {
-            TranscriptionQuality::HighAccuracy
+            TranscriptionQuality::Premium  // 長音頻使用最佳模型
         };
 
         info!("🎯 自適應品質選擇: {:?} (音頻: {}ms)", quality, audio_duration_ms);
         self.transcribe_blocking(audio_samples, quality, None).await
+    }
+
+    /// 中文優化轉錄 - 針對正體中文和台語
+    pub async fn transcribe_chinese_optimized(
+        &self,
+        audio_samples: Vec<f32>,
+        is_taiwanese: bool,
+        language_hint: Option<String>,
+    ) -> Result<TranscriptionResult> {
+        let audio_duration_ms = (audio_samples.len() as f64 / 16.0) as u64;
+        
+        // 台語強制使用最佳模型，中文根據長度選擇
+        let quality = if is_taiwanese {
+            TranscriptionQuality::Premium
+        } else if audio_duration_ms <= 10000 {
+            TranscriptionQuality::Medium
+        } else {
+            TranscriptionQuality::Premium
+        };
+        
+        let language = language_hint.unwrap_or_else(|| {
+            if is_taiwanese {
+                "zh".to_string()  // 台語仍使用中文語言代碼
+            } else {
+                "zh".to_string()  // 正體中文
+            }
+        });
+
+        info!("🀄 中文優化轉錄: {:?}, 台語: {}, 語言: {}", quality, is_taiwanese, language);
+        self.transcribe_blocking(audio_samples, quality, Some(language)).await
     }
 
     /// 獲取模型池統計資料

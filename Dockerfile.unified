@@ -224,23 +224,27 @@ RUN echo "🔧 nginx 配置將在運行時驗證"
 # 跳過建構時的 supervisor 配置驗證（運行時才能正確測試）
 RUN echo "🔧 supervisor 配置將在運行時驗證"
 
-# 下載 Whisper 模型 (業界標準模型)
+# 下載 Whisper 模型 (中文優化業界標準模型)
 RUN mkdir -p /app/models && \
-    echo "📥 正在下載 Whisper 模型..." && \
+    echo "📥 正在下載 Whisper 中文優化模型..." && \
     cd /app/models && \
     echo "下載 Turbo 模型 (ggml-tiny.bin)..." && \
     curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin" \
-         -o "ggml-tiny.bin" --connect-timeout 30 --max-time 1800 && \
+         -o "ggml-tiny.bin" --connect-timeout 30 --max-time 3600 && \
     echo "下載 Balanced 模型 (ggml-base.bin)..." && \
     curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" \
-         -o "ggml-base.bin" --connect-timeout 30 --max-time 1800 && \
-    echo "下載 High-Accuracy 模型 (ggml-large-v2.bin)..." && \
-    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v2.bin" \
-         -o "ggml-large-v2.bin" --connect-timeout 30 --max-time 1800 && \
-    echo "✅ 模型下載完成" && \
+         -o "ggml-base.bin" --connect-timeout 30 --max-time 3600 && \
+    echo "下載 Medium 模型 - 中文優化 (ggml-medium.bin)..." && \
+    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin" \
+         -o "ggml-medium.bin" --connect-timeout 30 --max-time 3600 && \
+    echo "下載 Premium 模型 - 業界領先 (ggml-large-v3.bin)..." && \
+    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin" \
+         -o "ggml-large-v3.bin" --connect-timeout 30 --max-time 3600 && \
+    echo "✅ 中文優化模型下載完成" && \
     echo "📊 模型檔案大小:" && \
     ls -lh /app/models/ && \
-    echo "📁 模型總大小: $(du -sh /app/models | cut -f1)"
+    echo "📁 模型總大小: $(du -sh /app/models | cut -f1)" && \
+    echo "🎯 中文優化功能: Medium + Premium 模型支援正體中文、台語"
 
 # 創建日誌文件並設定權限
 RUN touch /var/log/care-voice/app.log && \

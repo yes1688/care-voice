@@ -1,0 +1,40 @@
+# ===================================
+# Care Voice 純運行時容器
+# 只運行編譯好的二進制檔案
+# ===================================
+
+FROM docker.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04
+
+# 安裝必要的運行時依賴
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libopus0 \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 創建應用目錄
+RUN mkdir -p /app/models
+
+# 複製編譯好的二進制檔案
+COPY backend/target/release/care-voice /app/care-voice
+
+# 設置權限
+RUN chmod +x /app/care-voice
+
+# 設置工作目錄
+WORKDIR /app
+
+# 暴露端口
+EXPOSE 8081
+
+# 設置環境變數
+ENV RUST_LOG=info
+ENV BACKEND_PORT=8081
+
+# 健康檢查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+
+# 啟動命令
+CMD ["./care-voice"]

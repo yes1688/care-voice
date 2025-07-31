@@ -327,26 +327,36 @@ impl WhisperService {
         #[cfg(not(feature = "cuda"))]
         let processed_audio = audio_samples;
 
-        // 智能品質選擇
+        // 中文優化智能品質選擇
         let quality = quality_preference.unwrap_or_else(|| {
             let audio_duration_s = processed_audio.len() as f64 / 16000.0;
-            if audio_duration_s <= 5.0 {
-                TranscriptionQuality::Turbo
-            } else if audio_duration_s <= 30.0 {
-                TranscriptionQuality::Balanced
+            if audio_duration_s <= 3.0 {
+                TranscriptionQuality::Turbo  // 短音頻使用快速模型
+            } else if audio_duration_s <= 15.0 {
+                TranscriptionQuality::Medium  // 中等長度優先使用中文優化模型
             } else {
-                TranscriptionQuality::HighAccuracy
+                TranscriptionQuality::Premium  // 長音頻使用最佳模型
             }
         });
 
         info!("🎛️  選擇轉錄品質: {:?}", quality);
 
-        // 使用多模型池進行轉錄
-        let result = self.model_pool.transcribe_blocking(
-            processed_audio,
-            quality,
-            Some("zh".to_string()), // 支援中文
-        ).await?;
+        // 使用中文優化多模型池進行轉錄
+        let result = if quality.is_chinese_optimized() {
+            // 使用中文優化轉錄
+            self.model_pool.transcribe_chinese_optimized(
+                processed_audio,
+                false, // 預設不是台語，待後續增加語言檢測
+                Some("zh".to_string()),
+            ).await?
+        } else {
+            // 使用一般轉錄
+            self.model_pool.transcribe_blocking(
+                processed_audio,
+                quality,
+                Some("zh".to_string()), // 支援中文
+            ).await?
+        };
 
         let processing_time = start_time.elapsed();
 
@@ -439,7 +449,7 @@ impl WhisperService {
         let result = self.transcribe_enhanced(
             audio_samples.to_vec(),
             AudioFormat::Unknown,
-            Some(TranscriptionQuality::Balanced),
+            Some(TranscriptionQuality::Medium), // 預設使用中文優化模型
         ).await?;
         
         Ok(result.full_transcript)
@@ -604,11 +614,11 @@ async fn upload_webcodecs_audio(
             
             info!("✅ WebCodecs OPUS 解碼成功: {} samples", audio_samples.len());
             
-            // 🚀 使用業界領先的智能轉錄服務
+            // 🚀 使用業界領先的中文優化轉錄服務
             let enhanced_result = whisper_service.transcribe_enhanced(
                 audio_samples,
                 AudioFormat::OggOpus, // WebCodecs 產生的是純 OPUS，類似 OGG-OPUS
-                Some(TranscriptionQuality::HighAccuracy), // WebCodecs 高品質音頻，使用高準確度模型
+                Some(TranscriptionQuality::Premium), // WebCodecs 高品質音頻，使用業界領先模型
             ).await.map_err(|e| {
                 error!("🚨 WebCodecs 轉錄失敗: {}", e);
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { 

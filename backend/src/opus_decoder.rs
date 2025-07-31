@@ -54,7 +54,7 @@ impl Default for OpusDecoderConfig {
 pub struct CareVoiceOpusDecoder {
     config: OpusDecoderConfig,
     #[cfg(feature = "opus-support")]
-    decoder: Option<std::cell::RefCell<OpusDecoder>>,
+    decoder: Option<Arc<Mutex<OpusDecoder>>>,
 }
 
 impl CareVoiceOpusDecoder {
@@ -78,7 +78,7 @@ impl CareVoiceOpusDecoder {
             match OpusDecoder::new(config.sample_rate, channels) {
                 Ok(dec) => {
                     info!("✅ 原生 OPUS 解碼器初始化成功");
-                    Some(std::cell::RefCell::new(dec))
+                    Some(Arc::new(Mutex::new(dec)))
                 }
                 Err(e) => {
                     warn!("⚠️  OPUS 解碼器初始化失敗: {}, 使用 fallback", e);
@@ -719,12 +719,14 @@ impl CareVoiceOpusDecoder {
                     let max_frame_size = 5760;
                     let mut output = vec![0f32; max_frame_size];
 
-                    // 正確的 OPUS decode_float API 調用
+                    // 🚀 業界領先 RAII 鎖作用域管理 - 主解碼
                     let decode_start = std::time::Instant::now();
-                    match decoder
-                        .borrow_mut()
-                        .decode_float(packet, &mut output, false)
-                    {
+                    let decode_result = {
+                        let mut dec = decoder.lock();
+                        dec.decode_float(packet, &mut output, false)
+                    }; // 🎯 主解碼鎖在此處自動釋放
+                    
+                    match decode_result {
                         Ok(sample_count) => {
                             let decode_time = decode_start.elapsed();
                             if sample_count > 0 {
@@ -751,10 +753,14 @@ impl CareVoiceOpusDecoder {
                             error!("❌ 包 {} 解碼失敗: {}, 耗時: {:?}", i + 1, e, decode_time);
                             failed_packets += 1;
 
-                            // 對於 WebCodecs，嘗試更寬鬆的解碼參數
-                            // 如果單包解碼失敗，嘗試 FEC (Forward Error Correction)
+                            // 🚀 業界領先 FEC 錯誤恢復 - 獨立鎖作用域
                             info!("🔧 嘗試 FEC 恢復 for 包 {}", i + 1);
-                            match decoder.borrow_mut().decode_float(&[], &mut output, true) {
+                            let fec_result = {
+                                let mut dec = decoder.lock();
+                                dec.decode_float(&[], &mut output, true)
+                            }; // 🎯 FEC 恢復鎖在此處自動釋放
+                            
+                            match fec_result {
                                 Ok(sample_count) => {
                                     if sample_count > 0 {
                                         info!("✅ FEC 恢復成功: {} samples", sample_count);
