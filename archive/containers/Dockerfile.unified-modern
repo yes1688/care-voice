@@ -1,0 +1,107 @@
+# ===================================
+# Care Voice 業界領先統一架構
+# Single Container, Modern Deployment
+# ===================================
+
+FROM docker.io/nvidia/cuda:12.9.1-devel-ubuntu24.04 as builder
+
+# 系統依賴安裝
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    cmake \
+    pkg-config \
+    libssl-dev \
+    libopus-dev \
+    libclang-dev \
+    llvm-dev \
+    clang \
+    libc6-dev \
+    nodejs \
+    npm \
+    nginx \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安裝 Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /build
+
+# 構建前端
+COPY frontend/ ./frontend/
+WORKDIR /build/frontend
+RUN npm ci && npm run build
+
+# 構建後端
+WORKDIR /build
+COPY backend/ ./backend/
+WORKDIR /build/backend
+RUN cargo build --release --features "opus-support"
+
+# ===================================
+# 生產環境
+# ===================================
+FROM docker.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04
+
+# 運行時依賴
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libopus0 \
+    nginx \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 創建目錄
+RUN mkdir -p /app/models /app/frontend
+
+# 複製構建產物
+COPY --from=builder /build/backend/target/release/care-voice /app/care-voice
+COPY --from=builder /build/frontend/dist/ /app/frontend/
+
+# nginx 配置
+RUN cat > /etc/nginx/nginx.conf << 'EOF'
+events { worker_connections 1024; }
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    client_max_body_size 100M;
+    
+    server {
+        listen 3000;
+        location / {
+            root /app/frontend;
+            index index.html;
+            try_files $uri $uri/ /index.html;
+        }
+        location /api/ {
+            proxy_pass http://localhost:8081/;
+            proxy_set_header Host $host;
+        }
+        location /health {
+            proxy_pass http://localhost:8081/health;
+        }
+    }
+}
+EOF
+
+# 下載模型
+RUN curl -L -o /app/models/ggml-base.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+
+# 啟動腳本
+RUN cat > /app/start.sh << 'EOF'
+#!/bin/bash
+echo "🚀 Care Voice 統一服務啟動..."
+nginx -g "daemon on;"
+cd /app
+export RUST_LOG=info
+export BACKEND_PORT=8081
+exec ./care-voice-backend
+EOF
+RUN chmod +x /app/start.sh
+
+EXPOSE 3000 8081
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+CMD ["/app/start.sh"]
