@@ -63,3 +63,6 @@ test-output/
 
 # Models directory (use Git LFS for large model files)
 models/
+
+# Audio debugging files
+audio-debug/

@@ -136,7 +136,7 @@ RUN ls -la target/release/ && \
 # =======================================================
 # 階段3: 最終整合 (nginx + CUDA 12.9 + cuDNN + 前端 + 後端 + supervisor)
 # =======================================================
-FROM docker.io/nvidia/cuda:12.9.1-devel-ubuntu24.04 AS final
+FROM docker.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04 AS final
 
 LABEL stage="final-integration"
 LABEL version="2.0.0"
@@ -224,27 +224,27 @@ RUN echo "🔧 nginx 配置將在運行時驗證"
 # 跳過建構時的 supervisor 配置驗證（運行時才能正確測試）
 RUN echo "🔧 supervisor 配置將在運行時驗證"
 
-# 下載 Whisper 模型 (中文優化業界標準模型)
-RUN mkdir -p /app/models && \
-    echo "📥 正在下載 Whisper 中文優化模型..." && \
-    cd /app/models && \
-    echo "下載 Turbo 模型 (ggml-tiny.bin)..." && \
-    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin" \
-         -o "ggml-tiny.bin" --connect-timeout 30 --max-time 3600 && \
-    echo "下載 Balanced 模型 (ggml-base.bin)..." && \
-    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" \
-         -o "ggml-base.bin" --connect-timeout 30 --max-time 3600 && \
-    echo "下載 Medium 模型 - 中文優化 (ggml-medium.bin)..." && \
-    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin" \
-         -o "ggml-medium.bin" --connect-timeout 30 --max-time 3600 && \
-    echo "下載 Premium 模型 - 業界領先 (ggml-large-v3.bin)..." && \
-    curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin" \
-         -o "ggml-large-v3.bin" --connect-timeout 30 --max-time 3600 && \
-    echo "✅ 中文優化模型下載完成" && \
-    echo "📊 模型檔案大小:" && \
+# 智能模型處理 - 優先使用本地模型
+RUN mkdir -p /app/models
+
+# 複製本地模型（如果存在）
+COPY models/ /app/models/
+
+# 檢查關鍵模型是否存在，不存在則下載
+RUN if [ ! -f /app/models/ggml-large-v3.bin ]; then \
+        echo "📥 本地無 large-v3 模型，開始下載..."; \
+        curl -L "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin" \
+             -o "/app/models/ggml-large-v3.bin" --connect-timeout 30 --max-time 3600; \
+        echo "✅ Large-v3 模型下載完成"; \
+    else \
+        echo "✅ 使用本地 Large-v3 模型"; \
+    fi
+
+# 驗證模型並顯示統計
+RUN echo "📊 最終模型檔案:" && \
     ls -lh /app/models/ && \
     echo "📁 模型總大小: $(du -sh /app/models | cut -f1)" && \
-    echo "🎯 中文優化功能: Medium + Premium 模型支援正體中文、台語"
+    echo "🎯 中文優化功能: 支援正體中文、台語轉錄"
 
 # 創建日誌文件並設定權限
 RUN touch /var/log/care-voice/app.log && \
@@ -303,7 +303,7 @@ echo "🔧 檢查配置文件..."\n\
 nginx -t || exit 1\n\
 \n\
 echo "📝 啟動 supervisor..."\n\
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n\
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/care-voice.conf\n\
 ' > /usr/local/bin/start.sh && \
     chmod +x /usr/local/bin/start.sh
 
