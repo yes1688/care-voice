@@ -7,6 +7,7 @@ date_completed: ""
 status: "in_progress"  # draft/in_progress/completed/cancelled/on_hold
 priority: "medium"     # low/medium/high/critical
 category: "development"  # development/bugfix/optimization/documentation/testing
+technical_level: "standard" # standard/advanced/industry_leading  
 estimated_duration: "2 hours"
 actual_duration: ""
 tags: ["tag1", "tag2"]
@@ -19,6 +20,7 @@ dependencies: []
 ## 📋 計劃概要
 - **目標**: [主要目標描述]
 - **觸發原因**: [為什麼需要這個計劃]
+- **技術等級**: [standard/advanced/🏆 industry_leading]
 - **預期完成時間**: [預估時間]
 
 ## 🎯 具體目標
@@ -51,3 +53,8 @@ dependencies: []
 
 ## 📝 備註
 [其他重要資訊]
+
+## 🏷️ 技術等級說明
+- **standard**: 常規開發任務，使用既有技術
+- **advanced**: 需要深度技術知識，涉及複雜架構
+- **🏆 industry_leading**: 業界領先技術，創新性突破
