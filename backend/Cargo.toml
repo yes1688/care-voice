@@ -52,6 +52,9 @@ dasp = "0.11"           # 數位音頻信號處理
 # === 系統資訊 ===
 num_cpus = "1.16"       # CPU 核心數檢測
 
+# === 工具與識別符 ===
+uuid = { version = "1.6", features = ["v4", "serde"] }  # 會話ID生成
+
 # === 錯誤處理與日誌 ===
 anyhow = "1.0"
 thiserror = "1.0"
@@ -62,7 +65,6 @@ tracing-opentelemetry = { version = "0.26", optional = true }
 # === 時間與配置 ===
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.14"
-uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # === 效能監控 (OpenTelemetry) ===
 opentelemetry = { version = "0.26", features = ["metrics", "trace"] }

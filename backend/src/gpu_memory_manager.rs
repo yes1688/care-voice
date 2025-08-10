@@ -4,12 +4,11 @@
 // ===================================
 
 #[cfg(feature = "cuda")]
-use cudarc::driver::{CudaDevice, CudaSlice, DriverError, CudaFunction, LaunchAsync, LaunchConfig};
+use cudarc::driver::{CudaDevice, CudaSlice};
 use std::sync::Arc;
 use parking_lot::Mutex;
-use tracing::{info, error, warn, debug};
+use tracing::{info, warn, debug};
 use anyhow::{Result, Context};
-use std::collections::HashMap;
 use metrics::{counter, histogram, gauge};
 
 /// GPU 記憶體池配置
@@ -144,12 +143,12 @@ impl GpuMemoryManager {
     #[cfg(feature = "cuda")]
     /// 創建記憶體池
     fn create_memory_pool(
-        device: &CudaDevice,
+        _device: &CudaDevice,
         config: &GpuMemoryConfig,
     ) -> Result<Vec<MemoryBlock>> {
-        let mut pool = Vec::new();
-        let block_size_bytes = config.block_size_mb * 1024 * 1024 / 4; // f32 大小
-        let num_blocks = config.pre_allocated_mb / config.block_size_mb;
+        let pool = Vec::new();
+        let _block_size_bytes = config.block_size_mb * 1024 * 1024 / 4; // f32 大小
+        let _num_blocks = config.pre_allocated_mb / config.block_size_mb;
 
         // 暫時跳過記憶體池預分配 - 簡化實現
         info!("記憶體池預分配暫時跳過 (簡化實現)");

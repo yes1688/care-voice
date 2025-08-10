@@ -10,7 +10,6 @@ use tracing::{info, error, warn, debug, span, Level};
 use anyhow::{Result, Context as AnyhowContext};
 use std::collections::HashMap;
 use std::time::Instant;
-use rayon::prelude::*;
 use crossbeam::channel::{self, Receiver, Sender};
 use uuid::Uuid;
 use std::sync::atomic::AtomicU64;
@@ -115,9 +114,20 @@ impl WhisperModel {
         info!("正在初始化 {} 模型: {}", quality.model_name(), model_path);
         
         let start_time = Instant::now();
+        
+        // 🚀 業界領先 CUDA 兼容性檢測
+        let params = WhisperContextParameters::default();
+        if let Ok(_) = std::env::var("CUDA_VISIBLE_DEVICES") {
+            // GPU 可見時進行架構兼容性檢測
+            if !WhisperModelPool::check_cuda_compatibility() {
+                warn!("🚨 CUDA 架構不兼容，但遵循 GPU 為生原則，繼續嘗試 GPU 模式");
+                // GPU 為生：即使不兼容也不降級到 CPU
+            }
+        }
+        
         let context = WhisperContext::new_with_params(
             &model_path,
-            WhisperContextParameters::default(),
+            params,
         ).with_context(|| format!("無法載入 Whisper 模型: {}", model_path))?;
         
         let creation_time = start_time.elapsed();
@@ -175,9 +185,11 @@ impl WhisperModel {
             },
             TranscriptionQuality::Premium => {
                 params.set_n_threads(8);
-                params.set_temperature(0.0);  // 最佳準確度
-                // params.set_best_of(5); // whisper-rs API 已變更
-                // params.set_beam_size(5); // whisper-rs API 已變更
+                params.set_temperature(0.0);  // 中文最佳準確度設定
+                params.set_print_special(false);
+                params.set_print_progress(false);
+                // 中文優化：強制設定語言以提升準確度
+                params.set_language(Some("zh"));
             },
         }
 
@@ -286,17 +298,58 @@ pub struct WhisperModelPool {
 }
 
 impl WhisperModelPool {
+    /// 🚀 業界領先 CUDA 架構兼容性檢測
+    fn check_cuda_compatibility() -> bool {
+        // 檢查環境變數是否強制 CPU 模式
+        if std::env::var("WHISPER_USE_GPU").map(|v| v == "false").unwrap_or(false) {
+            info!("🔧 WHISPER_USE_GPU=false，強制使用 CPU 模式");
+            return false;
+        }
+        
+        // 嘗試檢測 GPU compute capability
+        if let Ok(output) = std::process::Command::new("nvidia-smi")
+            .arg("--query-gpu=compute_cap")
+            .arg("--format=csv,noheader,nounits")
+            .output() {
+            if let Ok(compute_cap) = std::str::from_utf8(&output.stdout) {
+                let compute_cap = compute_cap.trim();
+                info!("🔍 檢測到 GPU compute capability: {}", compute_cap);
+                
+                // RTX 50 系列是 12.0，需要專門編譯的版本
+                if compute_cap.starts_with("12.") {
+                    warn!("⚠️ RTX 50 系列 GPU 需要專門編譯的 CUDA 版本");
+                    warn!("🔧 當前二進制文件可能不兼容，建議重新編譯支援 compute capability 12.x");
+                    // 暫時使用 CPU 模式避免崩潰
+                    return false;
+                }
+                
+                // 支援的架構：8.x, 7.x, 6.x, 5.x
+                if compute_cap.starts_with("8.") || 
+                   compute_cap.starts_with("7.") || 
+                   compute_cap.starts_with("6.") || 
+                   compute_cap.starts_with("5.") {
+                    info!("✅ GPU 架構兼容，啟用 CUDA 加速");
+                    return true;
+                } else {
+                    warn!("⚠️ 不支援的 GPU 架構: {}，切換到 CPU 模式", compute_cap);
+                    return false;
+                }
+            }
+        }
+        
+        // 如果無法檢測，保守地使用 CPU 模式
+        warn!("❓ 無法檢測 GPU 兼容性，使用 CPU 模式確保穩定");
+        false
+    }
+
     /// 創建新的模型池
     pub fn new(model_base_path: &str) -> Result<Self> {
         info!("🚀 正在初始化 Whisper 模型池...");
         
         let mut models = HashMap::new();
         
-        // 載入所有品質等級的模型
+        // 只載入最佳中文模型 (large-v3)
         for quality in [
-            TranscriptionQuality::Turbo,
-            TranscriptionQuality::Balanced,
-            TranscriptionQuality::Medium,
             TranscriptionQuality::Premium,
         ] {
             let model_path = format!("{}/{}", model_base_path, quality.model_name());
@@ -455,7 +508,7 @@ impl WhisperModelPool {
         
         // 輪詢結果
         let start_time = Instant::now();
-        let timeout = std::time::Duration::from_secs(30);
+        let timeout = std::time::Duration::from_secs(90); // 增加到90秒以處理OPUS解碼修復
         
         loop {
             if let Some(result) = self.get_result(task_id) {

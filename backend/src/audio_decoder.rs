@@ -4,19 +4,24 @@
 
 use crate::audio_format::{AudioFormat, AudioFormatDetector};
 use crate::opus_decoder::{
-    CareVoiceOpusDecoder, OpusDecoderConfig, OpusDecoderPool, 
-    decode_audio_universal, detect_audio_format
+    OpusDecoderConfig, OpusDecoderPool, 
+    decode_audio_universal
 };
-use tracing::{info, warn, debug, error};
+use tracing::{info, warn, error};
 use anyhow::{Result, Context};
 use metrics::{counter, histogram, gauge};
 use std::sync::Arc;
 use parking_lot::Mutex;
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::PathBuf;
+use std::time::SystemTime;
+use uuid::Uuid;
 use std::io::Cursor;
 use symphonia::core::audio::{AudioBufferRef, Signal};
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::errors::Error as SymphoniaError;
-use symphonia::core::formats::{FormatOptions, FormatReader};
+use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
@@ -25,7 +30,7 @@ use hound;
 /// 業界領先的統一音頻解碼器 - 支援所有現代瀏覽器格式
 pub struct UnifiedAudioDecoder {
     format_detector: Arc<Mutex<AudioFormatDetector>>,
-    opus_decoder_pool: Arc<OpusDecoderPool>,
+    opus_48k_decoder_pool: Arc<OpusDecoderPool>,    // 48kHz 解碼器池 (統一音頻處理)
 }
 
 impl Default for UnifiedAudioDecoder {
@@ -35,16 +40,24 @@ impl Default for UnifiedAudioDecoder {
 }
 
 impl UnifiedAudioDecoder {
-    /// 創建新的統一音頻解碼器
+    /// 創建新的統一音頻解碼器（簡化版）
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        info!("🚀 初始化業界領先統一音頻解碼器");
+        info!("🚀 初始化業界領先統一音頻解碼器（簡化架構）");
         
-        let config = OpusDecoderConfig::default();
-        let opus_pool = OpusDecoderPool::new(config)?;
+        // 48kHz 解碼器池 (優化配置)
+        let config_48k = OpusDecoderConfig {
+            sample_rate: 48000,  // WebCodecs 固定採樣率
+            channels: 1,         // 單聲道 (Whisper 要求)
+            bit_rate: 96000,     // 🔧 優化：匹配前端96kbps配置
+            enable_normalization: true,
+            pool_size: 4,        // 🔧 優化：減少池大小節省記憶體
+        };
+        let opus_48k_pool = OpusDecoderPool::new(config_48k)?;
+        info!("✅ 48kHz OPUS 解碼器池初始化成功（統一架構）");
         
         Ok(Self {
             format_detector: Arc::new(Mutex::new(AudioFormatDetector::new())),
-            opus_decoder_pool: Arc::new(opus_pool),
+            opus_48k_decoder_pool: Arc::new(opus_48k_pool),
         })
     }
 
@@ -132,10 +145,128 @@ impl UnifiedAudioDecoder {
         decode_audio_universal(data, Some(mime_type)).map_err(|e| e.into())
     }
 
-    /// 🚀 WebCodecs 原始 OPUS 解碼 - 2025年業界領先技術
+    /// 🚀 WebCodecs 獨立包 OPUS 解碼 - 2025年業界領先技術（修復版）
+    pub fn decode_webcodecs_packets(&self, packets: &[Vec<u8>]) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
+        let decode_start = std::time::Instant::now();
+        info!("🚀 開始 WebCodecs 獨立包 OPUS 解碼: {} 個包", packets.len());
+
+        if packets.is_empty() {
+            return Err("WebCodecs 包數組為空".into());
+        }
+
+        // 統計包大小分佈
+        let sizes: Vec<usize> = packets.iter().map(|p| p.len()).collect();
+        let min_size = *sizes.iter().min().unwrap();
+        let max_size = *sizes.iter().max().unwrap();
+        let avg_size = sizes.iter().sum::<usize>() / sizes.len();
+        info!(
+            "📊 WebCodecs 包統計: 數量={}, 大小範圍={}~{}b, 平均={}b",
+            packets.len(), min_size, max_size, avg_size
+        );
+
+        // 🎧 創建音頻調試存檔（如果啟用）
+        let mut debug_archive = if std::env::var("CARE_VOICE_DEBUG_AUDIO").is_ok() {
+            match AudioDebugArchive::new() {
+                Ok(mut archive) => {
+                    // 存檔所有獨立包（合併為調試用途）
+                    let total_size = packets.iter().map(|p| p.len()).sum::<usize>();
+                    let mut combined_data = Vec::with_capacity(total_size);
+                    for packet in packets {
+                        combined_data.extend_from_slice(packet);
+                    }
+                    if let Err(e) = archive.archive_raw_opus(&combined_data) {
+                        warn!("🚨 存檔獨立包失敗: {}", e);
+                    }
+                    Some(archive)
+                },
+                Err(e) => {
+                    warn!("🚨 創建音頻調試存檔失敗: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // 🎯 簡化架構：使用48kHz解碼器池處理獨立包
+        info!("🔧 使用48kHz解碼器池處理WebCodecs獨立包");
+        
+        let samples = match self.opus_48k_decoder_pool.decode_webcodecs_packets(packets) {
+            Ok(samples_48k) => {
+                info!("✅ 48kHz獨立包解碼成功: {} samples", samples_48k.len());
+                
+                // 🎧 存檔48kHz解碼結果
+                if let Some(ref mut archive) = debug_archive {
+                    if let Err(e) = archive.archive_decoded_48k(&samples_48k) {
+                        warn!("🚨 存檔48kHz解碼結果失敗: {}", e);
+                    }
+                }
+                
+                // 🔄 48kHz → 16kHz 重採樣 (Whisper AI 要求)
+                let samples_16k = Self::resample_48k_to_16k(&samples_48k);
+                info!("🔄 48kHz → 16kHz 重採樣完成: {} → {} samples", samples_48k.len(), samples_16k.len());
+                
+                // 🎧 存檔16kHz重採樣結果
+                if let Some(ref mut archive) = debug_archive {
+                    if let Err(e) = archive.archive_resampled_16k(&samples_16k) {
+                        warn!("🚨 存檔16kHz重採樣結果失敗: {}", e);
+                    }
+                }
+                
+                samples_16k
+            },
+            Err(e) => {
+                error!("❌ 48kHz獨立包解碼失敗: {}", e);
+                return Err(format!("WebCodecs 獨立包解碼失敗: {}", e).into());
+            }
+        };
+
+        let decode_time = decode_start.elapsed();
+        
+        // 🎧 存檔最終Whisper輸入數據
+        if let Some(ref mut archive) = debug_archive {
+            if let Err(e) = archive.archive_whisper_input(&samples) {
+                warn!("🚨 存檔Whisper輸入數據失敗: {}", e);
+            } else {
+                info!("🎧 音頻調試存檔完成: session_id={}", archive.session_id);
+            }
+        }
+        
+        // 記錄 WebCodecs 特定指標
+        histogram!("webcodecs_packets_decode_time_ms").record(decode_time.as_millis() as f64);
+        histogram!("webcodecs_packets_count").record(packets.len() as f64);
+        histogram!("webcodecs_packets_output_samples").record(samples.len() as f64);
+        counter!("webcodecs_packets_decode_success_total").increment(1);
+
+        info!("✅ WebCodecs 獨立包解碼完成: {} samples, 耗時: {:?}", samples.len(), decode_time);
+        Ok(samples)
+    }
+
+    /// 🚀 WebCodecs 原始 OPUS 解碼 - 2025年業界領先技術（已廢棄）
+    #[deprecated(note = "WebCodecs 應使用獨立包模式 decode_webcodecs_packets")]
     pub fn decode_raw_opus(&self, data: &[u8]) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
+        warn!("⚠️ 使用已廢棄的原始OPUS解碼，建議改用獨立包模式");
         let decode_start = std::time::Instant::now();
         info!("🚀 開始 WebCodecs 原始 OPUS 解碼: {} bytes", data.len());
+
+        // 🎧 創建音頻調試存檔（如果啟用）
+        let mut debug_archive = if std::env::var("CARE_VOICE_DEBUG_AUDIO").is_ok() {
+            match AudioDebugArchive::new() {
+                Ok(mut archive) => {
+                    // 存檔原始OPUS數據
+                    if let Err(e) = archive.archive_raw_opus(data) {
+                        warn!("🚨 存檔原始OPUS失敗: {}", e);
+                    }
+                    Some(archive)
+                },
+                Err(e) => {
+                    warn!("🚨 創建音頻調試存檔失敗: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         // 驗證數據大小
         if data.is_empty() {
@@ -146,32 +277,52 @@ impl UnifiedAudioDecoder {
             return Err("WebCodecs OPUS 數據過小，可能損壞".into());
         }
 
-        // 🎵 使用高性能 OPUS 解碼器池直接解碼
-        let samples = match self.opus_decoder_pool.decode(data) {
-            Ok(samples) => {
-                info!("✅ OPUS 解碼器池解碼成功: {} samples", samples.len());
-                samples
-            },
-            Err(e) => {
-                warn!("⚠️ OPUS 解碼器池失敗: {}, 嘗試後備方案", e);
+        // 🎯 WebCodecs 特殊處理：不要拆分包，直接解碼連續流
+        info!("🔧 WebCodecs 模式：跳過包拆分，直接流式解碼");
+        
+        // 🎯 簡化架構：只使用48kHz解碼器池 + 重採樣
+        info!("🔧 簡化模式：固定使用48kHz解碼器 + 16kHz重採樣");
+        
+        let samples = match self.opus_48k_decoder_pool.decode(data) {
+            Ok(samples_48k) => {
+                info!("✅ 48kHz OPUS 解碼器池解碼成功: {} samples", samples_48k.len());
                 
-                // 後備方案：假設數據是 OGG-OPUS 包裝的 OPUS 流
-                match Self::decode_opus_fallback(data) {
-                    Ok(samples) => {
-                        info!("✅ OPUS 後備解碼成功: {} samples", samples.len());
-                        samples
-                    },
-                    Err(fallback_err) => {
-                        error!("❌ 所有 OPUS 解碼方式都失敗");
-                        error!("  - 主解碼器: {}", e);
-                        error!("  - 後備解碼器: {}", fallback_err);
-                        return Err(format!("WebCodecs OPUS 解碼失敗: 主解碼器({}), 後備解碼器({})", e, fallback_err).into());
+                // 🎧 存檔48kHz解碼結果
+                if let Some(ref mut archive) = debug_archive {
+                    if let Err(e) = archive.archive_decoded_48k(&samples_48k) {
+                        warn!("🚨 存檔48kHz解碼結果失敗: {}", e);
                     }
                 }
+                
+                // 🔄 48kHz → 16kHz 重採樣 (Whisper AI 要求)
+                let samples_16k = Self::resample_48k_to_16k(&samples_48k);
+                info!("🔄 48kHz → 16kHz 重採樣完成: {} → {} samples", samples_48k.len(), samples_16k.len());
+                
+                // 🎧 存檔16kHz重採樣結果
+                if let Some(ref mut archive) = debug_archive {
+                    if let Err(e) = archive.archive_resampled_16k(&samples_16k) {
+                        warn!("🚨 存檔16kHz重採樣結果失敗: {}", e);
+                    }
+                }
+                
+                samples_16k
+            },
+            Err(e) => {
+                error!("❌ 48kHz OPUS 解碼失敗: {}", e);
+                return Err(format!("WebCodecs 48kHz OPUS 解碼失敗: {}", e).into());
             }
         };
 
         let decode_time = decode_start.elapsed();
+        
+        // 🎧 存檔最終Whisper輸入數據
+        if let Some(ref mut archive) = debug_archive {
+            if let Err(e) = archive.archive_whisper_input(&samples) {
+                warn!("🚨 存檔Whisper輸入數據失敗: {}", e);
+            } else {
+                info!("🎧 音頻調試存檔完成: session_id={}", archive.session_id);
+            }
+        }
         
         // 記錄 WebCodecs 特定指標
         histogram!("webcodecs_opus_decode_time_ms").record(decode_time.as_millis() as f64);
@@ -219,6 +370,49 @@ impl UnifiedAudioDecoder {
         }
     }
 
+    /// 🔧 WebCodecs 連續流解碼 - 跳過包拆分算法
+    fn decode_webcodecs_continuous_stream(data: &[u8]) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
+        info!("🚀 開始 WebCodecs 連續流解碼: {} bytes", data.len());
+
+        // 嘗試使用 Symphonia 直接解碼整個 OPUS 流
+        match Self::decode_with_symphonia(data, Some("opus")) {
+            Ok(samples) => {
+                info!("✅ Symphonia 連續流解碼成功: {} samples", samples.len());
+                return Ok(samples);
+            },
+            Err(e) => {
+                info!("⚠️ Symphonia OPUS 解碼失敗: {}, 嘗試其他方法", e);
+            }
+        }
+
+        // 嘗試作為 OGG 容器解碼
+        if data.len() >= 4 && &data[0..4] == b"OggS" {
+            info!("🔍 檢測到 OGG 頭部，嘗試 OGG 解碼");
+            match Self::decode_with_symphonia(data, Some("ogg")) {
+                Ok(samples) => {
+                    info!("✅ OGG 連續流解碼成功: {} samples", samples.len());
+                    return Ok(samples);
+                }
+                Err(e) => {
+                    info!("⚠️ OGG 解碼失敗: {}", e);
+                }
+            }
+        }
+
+        // 嘗試作為原始 PCM 數據解碼
+        match Self::try_decode_raw_audio_data(data) {
+            Ok(samples) => {
+                info!("✅ PCM 連續流解碼成功: {} samples", samples.len());
+                return Ok(samples);
+            }
+            Err(e) => {
+                info!("⚠️ PCM 解碼失敗: {}", e);
+            }
+        }
+
+        Err("WebCodecs 連續流解碼失敗".into())
+    }
+
     /// 嘗試解碼原始音頻數據
     fn try_decode_raw_audio_data(data: &[u8]) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
         info!("🔧 嘗試解碼為原始 PCM 數據");
@@ -242,20 +436,32 @@ impl UnifiedAudioDecoder {
         Ok(samples)
     }
 
-    /// WebM-OPUS 格式解碼 - 業界領先實現
+    /// WebM-OPUS 格式解碼 - 統一48kHz架構
     fn decode_webm_opus(&self, data: &[u8]) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
-        info!("🎵 解碼 WebM-OPUS (Chrome/Edge)");
+        info!("🎵 解碼 WebM-OPUS (Chrome/Edge) - 統一架構");
         
-        // 使用高性能解碼器池
-        self.opus_decoder_pool.decode(data).map_err(|e| e.into())
+        // 使用48kHz解碼器 + 重採樣到16kHz
+        match self.opus_48k_decoder_pool.decode(data) {
+            Ok(samples_48k) => {
+                let samples_16k = Self::resample_48k_to_16k(&samples_48k);
+                Ok(samples_16k)
+            },
+            Err(e) => Err(e.into())
+        }
     }
 
-    /// OGG-OPUS 格式解碼 - 業界領先實現
+    /// OGG-OPUS 格式解碼 - 統一48kHz架構
     fn decode_ogg_opus(&self, data: &[u8]) -> Result<Vec<f32>, Box<dyn std::error::Error>> {
-        info!("🎵 解碼 OGG-OPUS (Firefox)");
+        info!("🎵 解碼 OGG-OPUS (Firefox) - 統一架構");
         
-        // 使用高性能解碼器池
-        self.opus_decoder_pool.decode(data).map_err(|e| e.into())
+        // 使用48kHz解碼器 + 重採樣到16kHz
+        match self.opus_48k_decoder_pool.decode(data) {
+            Ok(samples_48k) => {
+                let samples_16k = Self::resample_48k_to_16k(&samples_48k);
+                Ok(samples_16k)
+            },
+            Err(e) => Err(e.into())
+        }
     }
 
     /// MP4-AAC 格式解碼 (Safari)
@@ -514,9 +720,9 @@ impl UnifiedAudioDecoder {
         ]
     }
 
-    /// 獲取解碼器統計資訊
+    /// 獲取解碼器統計資訊（簡化版）
     pub fn get_decoder_stats(&self) -> DecoderStats {
-        let pool_stats = self.opus_decoder_pool.get_pool_stats();
+        let pool_stats = self.opus_48k_decoder_pool.get_pool_stats();
         let detection_stats = self.format_detector.lock().get_detection_stats().clone();
         
         DecoderStats {
@@ -545,6 +751,303 @@ impl UnifiedAudioDecoder {
     pub fn reset_stats(&self) {
         info!("🔄 重置統一音頻解碼器統計");
         self.format_detector.lock().reset_stats();
+    }
+    
+    /// 🔄 48kHz → 16kHz 高品質重採樣 (智能算法選擇)
+    fn resample_48k_to_16k(samples_48k: &[f32]) -> Vec<f32> {
+        info!("🔄 開始48kHz→16kHz智能重採樣: {} samples", samples_48k.len());
+        
+        // 🚀 智能算法選擇：短音頻使用快速方法，長音頻使用高品質方法
+        if samples_48k.len() < 48000 { // 小於1秒的音頻
+            info!("🚀 短音頻快速重採樣路徑");
+            return Self::fast_resample_48k_to_16k(samples_48k);
+        }
+        
+        // 階段1: 高品質低通濾波 (7.2kHz截止頻率，更嚴格防混疊)
+        let filtered_samples = Self::apply_highquality_lowpass_filter(samples_48k, 7200.0, 48000.0);
+        
+        // 階段2: Lanczos 內插重採樣 (48kHz → 16kHz)
+        let ratio = 16000.0 / 48000.0; // 1/3
+        let output_length = (filtered_samples.len() as f32 * ratio) as usize;
+        let mut samples_16k = Vec::with_capacity(output_length);
+        
+        // Lanczos 重採樣參數
+        const LANCZOS_A: usize = 3; // Lanczos 窗口參數 (a=3 提供良好品質/性能平衡)
+        
+        for i in 0..output_length {
+            let src_index = i as f32 / ratio;
+            let base_index = src_index.floor() as isize;
+            
+            let mut sum = 0.0;
+            let mut weight_sum = 0.0;
+            
+            // Lanczos 內插窗口範圍
+            for j in -(LANCZOS_A as isize)..(LANCZOS_A as isize) {
+                let sample_index = base_index + j;
+                
+                // 邊界檢查
+                if sample_index >= 0 && (sample_index as usize) < filtered_samples.len() {
+                    let distance = src_index - sample_index as f32;
+                    let weight = Self::lanczos_kernel(distance, LANCZOS_A as f32);
+                    
+                    sum += filtered_samples[sample_index as usize] * weight;
+                    weight_sum += weight;
+                }
+            }
+            
+            // 正規化並添加樣本
+            if weight_sum > 0.0 {
+                samples_16k.push(sum / weight_sum);
+            } else {
+                // 後備處理：使用最近鄰樣本
+                let nearest_idx = (src_index.round() as usize).min(filtered_samples.len() - 1);
+                samples_16k.push(filtered_samples[nearest_idx]);
+            }
+        }
+        
+        info!("✅ 高品質重採樣完成: {} → {} samples ({:.2}%, Lanczos-{} 內插)", 
+              samples_48k.len(), samples_16k.len(), 
+              (samples_16k.len() as f32 / samples_48k.len() as f32) * 100.0, LANCZOS_A);
+        
+        samples_16k
+    }
+    
+    /// 🎛️ 簡單低通濾波器 (IIR 1階)
+    fn apply_lowpass_filter(samples: &[f32], cutoff_freq: f32, sample_rate: f32) -> Vec<f32> {
+        if samples.is_empty() {
+            return Vec::new();
+        }
+        
+        // 計算濾波器係數 (1階 IIR 低通濾波器)
+        let rc = 1.0 / (2.0 * std::f32::consts::PI * cutoff_freq);
+        let dt = 1.0 / sample_rate;
+        let alpha = dt / (rc + dt);
+        
+        let mut filtered = Vec::with_capacity(samples.len());
+        let mut prev_output = samples[0]; // 初始值
+        
+        for &sample in samples {
+            // IIR 濾波器: y[n] = α * x[n] + (1-α) * y[n-1]
+            let output = alpha * sample + (1.0 - alpha) * prev_output;
+            filtered.push(output);
+            prev_output = output;
+        }
+        
+        filtered
+    }
+    
+    /// 🎯 Lanczos 核函數 (高品質重採樣窗函數)
+    fn lanczos_kernel(x: f32, a: f32) -> f32 {
+        if x.abs() >= a {
+            return 0.0;
+        }
+        if x == 0.0 {
+            return 1.0;
+        }
+        
+        let pi_x = std::f32::consts::PI * x;
+        let pi_x_a = pi_x / a;
+        
+        // Lanczos 窗函數: sinc(x) * sinc(x/a)
+        (pi_x.sin() / pi_x) * (pi_x_a.sin() / pi_x_a)
+    }
+    
+    /// 🎛️ 高品質低通濾波器 (Butterworth 2階 IIR)
+    fn apply_highquality_lowpass_filter(samples: &[f32], cutoff_freq: f32, sample_rate: f32) -> Vec<f32> {
+        if samples.is_empty() {
+            return Vec::new();
+        }
+        
+        // Butterworth 2階低通濾波器係數計算
+        let omega = 2.0 * std::f32::consts::PI * cutoff_freq / sample_rate;
+        let sin_omega = omega.sin();
+        let cos_omega = omega.cos();
+        let alpha = sin_omega / (2.0 * 2.0_f32.sqrt()); // Q = √2 for Butterworth
+        
+        // 濾波器係數
+        let a0 = 1.0 + alpha;
+        let a1 = -2.0 * cos_omega / a0;
+        let a2 = (1.0 - alpha) / a0;
+        let b0 = (1.0 - cos_omega) / (2.0 * a0);
+        let b1 = (1.0 - cos_omega) / a0;
+        let b2 = (1.0 - cos_omega) / (2.0 * a0);
+        
+        let mut filtered = Vec::with_capacity(samples.len());
+        let mut x1 = 0.0f32; // x[n-1]
+        let mut x2 = 0.0f32; // x[n-2]
+        let mut y1 = 0.0f32; // y[n-1]
+        let mut y2 = 0.0f32; // y[n-2]
+        
+        for &x0 in samples {
+            // Butterworth 2階差分方程: y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
+            let y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            
+            filtered.push(y0);
+            
+            // 更新延遲線
+            x2 = x1; x1 = x0;
+            y2 = y1; y1 = y0;
+        }
+        
+        filtered
+    }
+    
+    /// 🚀 快速重採樣 (適用於短音頻 < 1秒)
+    fn fast_resample_48k_to_16k(samples_48k: &[f32]) -> Vec<f32> {
+        // 使用簡化的2階Butterworth濾波器 + 線性內插
+        let mut filtered = Vec::with_capacity(samples_48k.len());
+        
+        // 快速2階Butterworth係數 (7kHz截止)
+        let a1 = -1.1429805f32;
+        let a2 = 0.4128016f32;
+        let b0 = 0.0676f32;
+        let b1 = 0.1353f32;
+        let b2 = 0.0676f32;
+        
+        let mut x1 = 0.0f32; let mut x2 = 0.0f32;
+        let mut y1 = 0.0f32; let mut y2 = 0.0f32;
+        
+        // 快速濾波
+        for &x0 in samples_48k {
+            let y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            filtered.push(y0);
+            x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+        }
+        
+        // 簡單3:1降採樣（取每第3個樣本）
+        let mut samples_16k = Vec::with_capacity(filtered.len() / 3);
+        for (i, &sample) in filtered.iter().enumerate() {
+            if i % 3 == 0 {
+                samples_16k.push(sample);
+            }
+        }
+        
+        info!("✅ 快速重採樣完成: {} → {} samples", samples_48k.len(), samples_16k.len());
+        samples_16k
+    }
+}
+
+/// 🎧 音頻調試存檔系統
+#[derive(Debug, Clone)]
+pub struct AudioDebugArchive {
+    pub session_id: String,
+    pub timestamp: SystemTime,
+    pub debug_dir: PathBuf,
+    
+    // 4個關鍵存檔點
+    pub raw_opus_data: Vec<u8>,           // 原始OPUS數據
+    pub decoded_48k_samples: Vec<f32>,    // 48kHz解碼結果  
+    pub resampled_16k_samples: Vec<f32>,  // 16kHz重採樣結果
+    pub whisper_input_samples: Vec<f32>,  // Whisper輸入數據
+}
+
+impl AudioDebugArchive {
+    /// 創建新的調試存檔會話
+    pub fn new() -> Result<Self> {
+        let session_id = Uuid::new_v4().to_string();
+        let timestamp = SystemTime::now();
+        
+        // 創建調試目錄
+        let debug_dir = PathBuf::from(format!("/tmp/care-voice-debug/{}", session_id));
+        fs::create_dir_all(&debug_dir)
+            .context("Failed to create debug directory")?;
+        
+        info!("🎧 創建音頻調試存檔會話: {}", session_id);
+        
+        Ok(Self {
+            session_id,
+            timestamp,
+            debug_dir,
+            raw_opus_data: Vec::new(),
+            decoded_48k_samples: Vec::new(),
+            resampled_16k_samples: Vec::new(),
+            whisper_input_samples: Vec::new(),
+        })
+    }
+    
+    /// 存檔原始OPUS數據
+    pub fn archive_raw_opus(&mut self, data: &[u8]) -> Result<()> {
+        self.raw_opus_data = data.to_vec();
+        
+        // 保存為OPUS文件
+        let opus_path = self.debug_dir.join("01_raw_opus.opus");
+        let mut file = File::create(&opus_path)?;
+        file.write_all(data)?;
+        
+        info!("💾 原始OPUS已存檔: {} bytes → {:?}", data.len(), opus_path);
+        Ok(())
+    }
+    
+    /// 存檔48kHz解碼結果
+    pub fn archive_decoded_48k(&mut self, samples: &[f32]) -> Result<()> {
+        self.decoded_48k_samples = samples.to_vec();
+        
+        // 保存為WAV文件
+        let wav_path = self.debug_dir.join("02_decoded_48k.wav");
+        Self::save_as_wav(&wav_path, samples, 48000)?;
+        
+        info!("💾 48kHz解碼結果已存檔: {} samples → {:?}", samples.len(), wav_path);
+        Ok(())
+    }
+    
+    /// 存檔16kHz重採樣結果
+    pub fn archive_resampled_16k(&mut self, samples: &[f32]) -> Result<()> {
+        self.resampled_16k_samples = samples.to_vec();
+        
+        // 保存為WAV文件
+        let wav_path = self.debug_dir.join("03_resampled_16k.wav");
+        Self::save_as_wav(&wav_path, samples, 16000)?;
+        
+        info!("💾 16kHz重採樣結果已存檔: {} samples → {:?}", samples.len(), wav_path);
+        Ok(())
+    }
+    
+    /// 存檔Whisper輸入數據
+    pub fn archive_whisper_input(&mut self, samples: &[f32]) -> Result<()> {
+        self.whisper_input_samples = samples.to_vec();
+        
+        // 保存為WAV文件
+        let wav_path = self.debug_dir.join("04_whisper_input.wav");
+        Self::save_as_wav(&wav_path, samples, 16000)?;
+        
+        info!("💾 Whisper輸入數據已存檔: {} samples → {:?}", samples.len(), wav_path);
+        Ok(())
+    }
+    
+    /// 將PCM樣本保存為WAV文件
+    fn save_as_wav(path: &PathBuf, samples: &[f32], sample_rate: u32) -> Result<()> {
+        let mut file = File::create(path)?;
+        
+        // WAV文件頭
+        let data_size = (samples.len() * 2) as u32; // 16-bit PCM
+        let file_size = 36 + data_size;
+        
+        // RIFF頭
+        file.write_all(b"RIFF")?;
+        file.write_all(&file_size.to_le_bytes())?;
+        file.write_all(b"WAVE")?;
+        
+        // fmt 塊
+        file.write_all(b"fmt ")?;
+        file.write_all(&16u32.to_le_bytes())?; // fmt塊大小
+        file.write_all(&1u16.to_le_bytes())?;  // 格式 (PCM)
+        file.write_all(&1u16.to_le_bytes())?;  // 聲道數
+        file.write_all(&sample_rate.to_le_bytes())?;
+        file.write_all(&(sample_rate * 2).to_le_bytes())?; // 字節率
+        file.write_all(&2u16.to_le_bytes())?;  // 塊對齊
+        file.write_all(&16u16.to_le_bytes())?; // 位深度
+        
+        // data 塊
+        file.write_all(b"data")?;
+        file.write_all(&data_size.to_le_bytes())?;
+        
+        // PCM數據 (轉換為16-bit)
+        for &sample in samples {
+            let pcm_sample = (sample * 32767.0).clamp(-32767.0, 32767.0) as i16;
+            file.write_all(&pcm_sample.to_le_bytes())?;
+        }
+        
+        Ok(())
     }
 }
 

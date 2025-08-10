@@ -3,7 +3,7 @@
 # 目標: 隔離編譯環境，確保所有依賴都正確安裝
 # =======================================================
 
-FROM docker.io/nvidia/cuda:12.9.1-devel-ubuntu24.04
+FROM docker.io/nvidia/cuda:12.8.1-devel-ubuntu24.04
 
 LABEL stage="build-environment"
 LABEL version="1.0.0" 
@@ -51,12 +51,16 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 ENV PATH="/root/.cargo/bin:${PATH}"
 ENV RUST_VERSION="1.88"
 
-# 配置 CUDA 環境變數
+# 配置 CUDA 環境變數 - RTX 50 系列優化
 ENV CUDA_ROOT="/usr/local/cuda"
 ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
 ENV CUDA_VISIBLE_DEVICES="all"
 ENV NVIDIA_VISIBLE_DEVICES="all"
 ENV NVIDIA_DRIVER_CAPABILITIES="compute,utility"
+# RTX 50 系列 (compute capability 12.0) 支援
+ENV TORCH_CUDA_ARCH_LIST="12.0;8.0;8.6;8.9"
+ENV CUDA_ARCH_LIST="120;80;86;89"
+ENV GGML_CUDA_COMPUTE_CAPABILITY="120"
 
 # 驗證編譯環境
 RUN echo "🔍 驗證完整編譯環境..." && \
@@ -77,20 +81,59 @@ WORKDIR /workspace
 # 創建編譯腳本
 RUN echo '#!/bin/bash\n\
 set -e\n\
-echo "🚀 開始 Care Voice 編譯..."\n\
+echo "🚀 開始 Care Voice RTX 50 系列編譯..."\n\
 echo "📁 工作目錄: $(pwd)"\n\
 echo "🦀 Rust 版本: $(rustc --version)"\n\
 echo "🔧 CUDA 版本: $(nvcc --version | head -n4 | tail -n1)"\n\
+echo "🎯 目標架構: RTX 5070 Ti (compute capability 12.0)"\n\
+echo ""\n\
+\n\
+# 清理之前的編譯緩存\n\
+echo "🧹 清理編譯緩存..."\n\
+cargo clean\n\
+\n\
+# 設定完整的 RTX 50 系列編譯環境\n\
+echo "⚙️  配置 RTX 50 系列編譯環境..."\n\
+export CUDA_HOME="/usr/local/cuda"\n\
+export CUDA_ROOT="/usr/local/cuda"\n\
+export PATH="/usr/local/cuda/bin:$PATH"\n\
+export LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"\n\
+\n\
+# RTX 50 系列專用編譯參數\n\
+export TORCH_CUDA_ARCH_LIST="12.0;8.0;8.6;8.9"\n\
+export CUDA_ARCH_LIST="120;80;86;89"\n\
+export GGML_CUDA_COMPUTE_CAPABILITY="120"\n\
+export CUDNN_PATH="/usr/local/cuda"\n\
+export CUDA_TOOLKIT_ROOT="/usr/local/cuda"\n\
+\n\
+# whisper-rs 特定編譯設定\n\
+export WHISPER_CUDA_ARCH_LIST="12.0,8.0,8.6,8.9"\n\
+export CMAKE_CUDA_ARCHITECTURES="120;80;86;89"\n\
+export NVCC_APPEND_FLAGS="--generate-code arch=compute_120,code=sm_120"\n\
+\n\
+echo "🔧 編譯環境設定:"\n\
+echo "  TORCH_CUDA_ARCH_LIST: $TORCH_CUDA_ARCH_LIST"\n\
+echo "  CUDA_ARCH_LIST: $CUDA_ARCH_LIST"\n\
+echo "  CMAKE_CUDA_ARCHITECTURES: $CMAKE_CUDA_ARCHITECTURES"\n\
 echo ""\n\
 \n\
 # 編譯 Rust 項目\n\
-echo "📦 編譯 Rust 依賴..."\n\
+echo "📦 重新編譯支援 RTX 50 系列..."\n\
 cd /workspace\n\
-RUST_LOG=info cargo build --release\n\
+RUST_LOG=info cargo build --release --verbose\n\
 \n\
-echo "✅ 編譯完成!"\n\
+echo "✅ RTX 50 系列編譯完成!"\n\
 echo "📊 編譯產出:"\n\
 ls -la target/release/\n\
+\n\
+echo "🎯 驗證 CUDA 架構支援:"\n\
+if [ -f "target/release/care-voice" ]; then\n\
+    echo "✅ care-voice 二進制文件存在"\n\
+    ldd target/release/care-voice | grep -i cuda || echo "⚠️  CUDA 庫連結檢查"\n\
+else\n\
+    echo "❌ care-voice 二進制文件不存在"\n\
+    exit 1\n\
+fi\n\
 ' > /usr/local/bin/compile.sh && \
     chmod +x /usr/local/bin/compile.sh
 

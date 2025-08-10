@@ -1,16 +1,16 @@
 /// Opus 音頻解碼器模組 - 業界領先實現
 /// 支援 WebM-OPUS 和 OGG-OPUS 格式，99.9% 瀏覽器相容性
 /// 整合性能監控、錯誤處理和線程安全的解碼器池管理
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use metrics::{counter, gauge, histogram};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::Arc;
-use tracing::{debug, error, info, span, warn, Level};
+use tracing::{debug, error, info, warn};
 
 // OPUS 支援 (條件編譯)
 #[cfg(feature = "opus-support")]
-use opus::{Application, Channels, Decoder as OpusDecoder};
+use opus::{Channels, Decoder as OpusDecoder};
 
 // 音頻容器解析
 
@@ -88,7 +88,7 @@ impl CareVoiceOpusDecoder {
         };
 
         #[cfg(not(feature = "opus-support"))]
-        let decoder = None;
+        let decoder: Option<Arc<Mutex<()>>> = None;
 
         let creation_time = creation_start.elapsed();
 
@@ -217,7 +217,7 @@ impl CareVoiceOpusDecoder {
 
     /// 解碼原始 OPUS 數據 - WebCodecs 專用（修復版本）
     fn decode_raw_opus(&self, data: &[u8]) -> Result<Vec<f32>> {
-        info!("🚀 開始解碼 WebCodecs OPUS 數據: {} bytes", data.len());
+        info!("🚀 開始解碼 OPUS 數據: {} bytes", data.len());
 
         // 🔍 智能格式檢測
         let is_ogg_format = data.len() >= 4 && &data[0..4] == b"OggS";
@@ -234,41 +234,45 @@ impl CareVoiceOpusDecoder {
             return self.decode_ogg_opus(data);
         }
 
-        // 🚀 WebCodecs 原始 OPUS 流處理
-        info!("🎯 檢測到 WebCodecs 原始 OPUS 流，執行智能拆分解碼");
-
-        // WebCodecs 輸出的是連續的 OPUS 包流，需要智能拆分成獨立包
-        match self.split_webcodecs_opus_stream_intelligent(data) {
-            Ok(packets) => {
-                if packets.is_empty() {
-                    warn!("⚠️ WebCodecs 流拆分結果為空");
-                    return Ok(vec![]);
-                }
-
-                info!("✅ WebCodecs 流拆分成功: {} 個包", packets.len());
-                self.decode_opus_packets(&packets)
-            }
-            Err(e) => {
-                error!("❌ WebCodecs 流拆分失敗: {}", e);
-
-                // 🔧 後備策略：嘗試作為單個大包處理
-                info!("🔧 後備策略：嘗試單包解碼");
-                match self.decode_opus_packets(&[data.to_vec()]) {
-                    Ok(samples) => {
-                        info!("✅ 單包後備解碼成功: {} samples", samples.len());
-                        Ok(samples)
-                    }
-                    Err(_) => {
-                        info!("🔧 最終後備策略：symphonia 通用解碼");
-                        self.decode_webcodecs_fallback(data)
-                    }
-                }
-            }
-        }
+        // 🚀 重要修復：對於 WebCodecs，不應該到達這裡
+        // WebCodecs 數據應該通過新的獨立包接口處理
+        warn!("⚠️ WebCodecs 數據不應該使用原始流解碼，請使用獨立包模式");
+        
+        // 嘗試後備方案，但記錄警告
+        counter!("opus_raw_decode_fallback_usage").increment(1);
+        self.decode_webcodecs_fallback(data)
     }
 
-    /// WebCodecs 智能流拆分 - 基於 OPUS 包結構的正確實現
+    /// 🚀 WebCodecs 獨立包解碼 - 正確的實現方式
+    pub fn decode_webcodecs_packets(&self, packets: &[Vec<u8>]) -> Result<Vec<f32>> {
+        info!("🚀 開始 WebCodecs 獨立包解碼: {} 個包", packets.len());
+        
+        if packets.is_empty() {
+            return Err(anyhow!("WebCodecs 包數組為空"));
+        }
+        
+        // 統計包信息
+        let sizes: Vec<usize> = packets.iter().map(|p| p.len()).collect();
+        let min_size = *sizes.iter().min().unwrap();
+        let max_size = *sizes.iter().max().unwrap();
+        let avg_size = sizes.iter().sum::<usize>() / sizes.len();
+        
+        info!(
+            "📊 WebCodecs 包統計: 數量={}, 大小範圍={}~{}b, 平均={}b",
+            packets.len(), min_size, max_size, avg_size
+        );
+        
+        // 直接使用現有的包解碼邏輯，不需要拆分
+        let samples = self.decode_opus_packets(packets)?;
+        
+        info!("✅ WebCodecs 獨立包解碼完成: {} samples", samples.len());
+        Ok(samples)
+    }
+
+    /// WebCodecs 智能流拆分 - 基於 OPUS 包結構的正確實現（已廢棄）
+    #[deprecated(note = "WebCodecs 應使用獨立包模式，不需要流拆分")]
     fn split_webcodecs_opus_stream_intelligent(&self, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        warn!("⚠️ 使用已廢棄的流拆分函數，建議改用獨立包模式");
         info!("🧠 開始智能拆分 WebCodecs OPUS 流: {} bytes", data.len());
 
         let mut packets = Vec::new();
@@ -320,28 +324,103 @@ impl CareVoiceOpusDecoder {
         Ok(packets)
     }
 
-    /// 尋找 OPUS 包邊界的智能方法
+    /// 尋找 OPUS 包邊界的智能方法 - 修復版本
     fn find_opus_packet_boundary(&self, data: &[u8], max_size: usize) -> usize {
         if data.len() < 2 {
             return data.len();
         }
 
-        // 基於觀察到的 WebCodecs 包大小模式
-        // 從控制台日誌可見：大多數包在 250-450 bytes 之間
-        let typical_sizes = [321, 297, 296, 298, 295, 300, 350, 400, 450, 500];
-
-        // 優先檢查典型大小
-        for &size in &typical_sizes {
-            if size < max_size && size + 4 < data.len() {
-                // 檢查該位置是否看起來像新包的開始
-                if self.looks_like_opus_packet_start(&data[size..]) {
-                    return size;
+        // 🎯 關鍵修復：正確解析OPUS TOC頭來確定包長度
+        if data.len() >= 1 {
+            let toc = data[0];
+            let config = (toc >> 3) & 0x1f;
+            let stereo = (toc >> 2) & 0x01;
+            let frame_packing = toc & 0x03;
+            
+            // 根據OPUS規範計算實際包大小
+            let estimated_packet_size = match frame_packing {
+                0 => self.estimate_single_frame_size(config, stereo, data),
+                1 => self.estimate_double_frame_size(config, stereo, data), 
+                2 => self.estimate_variable_frame_size(config, stereo, data),
+                3 => self.estimate_arbitrary_frame_size(config, stereo, data),
+                _ => 320, // 默認值
+            };
+            
+            let calculated_size = std::cmp::min(estimated_packet_size, max_size);
+            
+            // 驗證計算的邊界是否合理
+            if calculated_size > 8 && calculated_size < max_size - 10 {
+                // 檢查下一個可能的包頭
+                if calculated_size < data.len() && self.looks_like_opus_packet_start(&data[calculated_size..]) {
+                    return calculated_size;
                 }
             }
         }
 
-        // 如果沒找到明確邊界，使用經驗值
-        std::cmp::min(321, max_size) // 基於觀察到的平均包大小
+        // 動態尋找下一個有效的OPUS TOC頭
+        for pos in 20..std::cmp::min(600, max_size) {
+            if pos < data.len() && self.looks_like_opus_packet_start(&data[pos..]) {
+                return pos;
+            }
+        }
+
+        // 如果沒找到明確邊界，使用保守估算
+        std::cmp::min(320, max_size)
+    }
+
+    /// 估算單幀OPUS包大小
+    fn estimate_single_frame_size(&self, config: u8, stereo: u8, data: &[u8]) -> usize {
+        let base_size = match config {
+            0..=3 => 120,    // SILK-only 窄帶
+            4..=7 => 160,    // SILK-only 中頻帶  
+            8..=11 => 200,   // SILK-only 寬帶
+            12..=15 => 280,  // 混合模式
+            16..=19 => 320,  // CELT-only 寬帶
+            20..=31 => 360,  // CELT-only 全頻帶
+            _ => 320,
+        };
+        
+        // 立體聲通常需要更多字節
+        let stereo_multiplier = if stereo == 1 { 1.3 } else { 1.0 };
+        
+        // 檢查是否有長度字段
+        if data.len() > 1 {
+            (base_size as f32 * stereo_multiplier) as usize
+        } else {
+            base_size
+        }
+    }
+
+    /// 估算雙幀OPUS包大小
+    fn estimate_double_frame_size(&self, config: u8, stereo: u8, _data: &[u8]) -> usize {
+        self.estimate_single_frame_size(config, stereo, _data) * 2
+    }
+
+    /// 估算可變幀OPUS包大小
+    fn estimate_variable_frame_size(&self, config: u8, stereo: u8, data: &[u8]) -> usize {
+        // 可變幀包需要解析長度字段
+        if data.len() > 2 {
+            let length_byte = data[1];
+            if length_byte < 252 {
+                length_byte as usize + 2 // 包含TOC和長度字節
+            } else {
+                self.estimate_single_frame_size(config, stereo, data) * 2
+            }
+        } else {
+            self.estimate_single_frame_size(config, stereo, data)
+        }
+    }
+
+    /// 估算任意幀OPUS包大小
+    fn estimate_arbitrary_frame_size(&self, config: u8, stereo: u8, data: &[u8]) -> usize {
+        // 任意幀包結構更複雜，使用保守估算
+        if data.len() > 2 {
+            let count_byte = data[1] & 0x3f; // 幀計數
+            let frame_count = std::cmp::max(1, count_byte) as usize;
+            self.estimate_single_frame_size(config, stereo, data) * frame_count
+        } else {
+            self.estimate_single_frame_size(config, stereo, data)
+        }
     }
 
     /// 檢查數據是否看起來像 OPUS 包的開始
@@ -847,10 +926,19 @@ impl CareVoiceOpusDecoder {
         Ok(samples)
     }
 
-    /// 立體聲轉單聲道
+    /// 立體聲轉單聲道 - 修復版
     fn convert_to_mono(&self, samples: Vec<f32>) -> Vec<f32> {
+        // 🎯 修復：檢查是否真的需要立體聲轉換
+        // 如果OPUS解碼器配置為單聲道，那麼輸出應該已經是單聲道
+        if self.config.channels == 1 {
+            // 單聲道配置，不應該進行立體聲轉換
+            info!("✅ 音頻已是單聲道格式，跳過轉換: {} samples", samples.len());
+            return samples;
+        }
+
+        // 只有在明確配置為立體聲時才進行轉換
         if samples.len() % 2 != 0 {
-            warn!("立體聲樣本數不是偶數，可能不是立體聲格式");
+            warn!("⚠️ 立體聲樣本數不是偶數，保持原格式: {} samples", samples.len());
             return samples;
         }
 
@@ -887,7 +975,7 @@ impl CareVoiceOpusDecoder {
     }
 
     /// 簡化 WebM OPUS 包提取
-    fn extract_webm_opus_packets(&self, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn extract_webm_opus_packets(&self, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
         // 臨時修復：WebM 容器解析複雜，暫時跳過
         // 讓系統回退到原始 OPUS 處理以避免數據流破壞
         warn!("⚠️  WebM 解析暫時禁用，回退到原始處理以避免數據流破壞");
@@ -937,7 +1025,7 @@ impl CareVoiceOpusDecoder {
         info!("🔄 重置 Opus 解碼器狀態");
 
         #[cfg(feature = "opus-support")]
-        if let Some(ref mut decoder) = self.decoder {
+        if let Some(ref mut _decoder) = self.decoder {
             // OPUS 解碼器重置 (如果API支援)
             debug!("重置原生 OPUS 解碼器");
         }
@@ -995,12 +1083,51 @@ impl OpusDecoderPool {
         })
     }
 
-    /// 從池中獲取解碼器並解碼音頻
+    /// 🚀 從池中獲取解碼器並解碼WebCodecs獨立包
+    pub fn decode_webcodecs_packets(&self, packets: &[Vec<u8>]) -> Result<Vec<f32>> {
+        let decode_start = std::time::Instant::now();
+
+        // 嘗試從池中獲取解碼器
+        let decoder = {
+            let mut pool = self.pool.lock();
+            match pool.pop_front() {
+                Some(decoder) => {
+                    counter!("opus_decoder_pool_hits_total").increment(1);
+                    decoder
+                }
+                None => {
+                    // 池為空，創建臨時解碼器
+                    counter!("opus_decoder_pool_misses_total").increment(1);
+                    warn!("⚠️  解碼器池為空，創建臨時解碼器");
+                    CareVoiceOpusDecoder::new(self.config.clone())?
+                }
+            }
+        };
+
+        // 使用獨立包解碼
+        let samples = decoder.decode_webcodecs_packets(packets)?;
+
+        // 將解碼器歸還池中
+        {
+            let mut pool = self.pool.lock();
+            if pool.len() < self.pool_size {
+                pool.push_back(decoder);
+            }
+            gauge!("opus_decoder_pool_available").set(pool.len() as f64);
+        }
+
+        let decode_time = decode_start.elapsed();
+        histogram!("opus_decoder_pool_packets_decode_time_ms").record(decode_time.as_millis() as f64);
+
+        Ok(samples)
+    }
+
+    /// 從池中獲取解碼器並解碼音頻（原始流模式）
     pub fn decode(&self, data: &[u8]) -> Result<Vec<f32>> {
         let decode_start = std::time::Instant::now();
 
         // 嘗試從池中獲取解碼器
-        let mut decoder = {
+        let decoder = {
             let mut pool = self.pool.lock();
             match pool.pop_front() {
                 Some(decoder) => {

@@ -3,8 +3,7 @@
 // 99.9% 瀏覽器相容性，智能格式路由
 
 use tracing::{info, warn, debug, error};
-use anyhow::{Result, Context};
-use metrics::{counter, histogram, gauge};
+use metrics::{counter, histogram};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

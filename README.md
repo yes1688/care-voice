@@ -13,18 +13,13 @@
 - 🐳 **一鍵部署**：Docker Compose 開箱即用
 - 💯 **99.9% 相容性**：業界最廣瀏覽器支援
 
-## 📚 文檔中心
+## 📚 文檔導航
 
-**完整文檔請參考**: [**docs/ 資料夾**](./docs/)
-
-| 快速導航 | 說明 |
-|---------|------|
-| 🚀 [**快速開始**](./docs/guides/user/quick-start.md) | 一鍵部署和基本使用 |
-| ⚡ [**快速參考**](./docs/guides/user/QUICK_REFERENCE.md) | 常用命令和操作速查 |
-| 🏗️ [**系統架構**](./docs/system/architecture.md) | 技術設計和實施方案 |
-| 🔧 [**GPU 設置**](./docs/technical/gpu-configuration.md) | CUDA 配置和故障排除 |  
-| 📦 [**部署指南**](./docs/guides/user/INTEGRATED_DEPLOYMENT_README.md) | 完整部署和管理指南 |
-| 📋 [**完整導航**](./docs/README.md) | 所有文檔的中央入口 |
+| 文檔 | 說明 |
+|------|------|
+| 🚀 [**快速開始**](./docs/QUICK_START.md) | 一鍵部署和基本使用 |
+| 🏗️ [**系統架構**](./docs/ARCHITECTURE.md) | 技術設計和實施方案 |
+| 📦 [**部署指南**](./docs/DEPLOYMENT.md) | 完整部署和故障排除 |
 
 ## 🚀 一鍵啟動
 
@@ -106,14 +101,14 @@ podman stop care-voice-ultimate && podman rm care-voice-ultimate
 - **記憶體不足**: 確保至少 4GB VRAM 可用
 - **埠口衝突**: 使用 `lsof -i :8001` 檢查埠口佔用
 
-**詳細故障排除**: 參考 [GPU 配置指南](./docs/technical/gpu-configuration.md)
+**詳細故障排除**: 參考 [部署指南](./docs/DEPLOYMENT.md)
 
 ## 📁 專案結構
 
 ```
 care-voice/
-├── docs/                        # 📚 完整文檔系統
-├── Dockerfile.whisper-rs-gpu     # 🐳 GPU 容器配置
+├── docs/                        # 📚 精簡文檔系統
+├── Dockerfile.unified           # 🐳 統一容器配置
 ├── backend/                     # 🦀 Rust whisper-rs 後端
 ├── frontend/                    # ⚛️ Solid.js 前端
 ├── claude.md                    # ⚙️ 系統配置
@@ -134,4 +129,4 @@ MIT License - 開源自由使用
 
 ---
 
-**📚 完整文檔**: [docs/ 資料夾](./docs/) | **系統配置**: [claude.md](./claude.md)
+**📚 精簡文檔**: [docs/ 資料夾](./docs/) | **系統配置**: [claude.md](./claude.md)

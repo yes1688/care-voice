@@ -47,7 +47,7 @@ function App() {
   let mediaRecorder: MediaRecorder | null = null;
   let audioEncoder: AudioEncoder | null = null;
   let recordingInterval: number | null = null;
-  let audioChunks: Uint8Array[] = [];
+  let audioPackets: Uint8Array[] = []; // 🎯 修復：改用獨立包收集
 
   // 🚀 WebCodecs 支援檢測 - 2025年業界領先技術
   const detectWebCodecsSupport = (): WebCodecsInfo => {
@@ -57,12 +57,12 @@ function App() {
     let opusSupported = false;
     if (hasAudioEncoder) {
       try {
-        // 檢測 OPUS 編碼支援
+        // 檢測 OPUS 編碼支援 - 使用實際配置參數
         const testConfig = {
           codec: 'opus',
-          sampleRate: 48000,
+          sampleRate: 48000,      // 🎯 修復: 使用實際48kHz配置
           numberOfChannels: 1,
-          bitrate: 128000
+          bitrate: 128000         // 🎯 修復: 使用實際128kbps配置
         };
         opusSupported = AudioEncoder.isConfigSupported && 
                        AudioEncoder.isConfigSupported(testConfig);
@@ -185,52 +185,74 @@ function App() {
     performHealthCheck();
   });
 
-  // 🚀 WebCodecs 錄音實現 - 2025年業界領先技術
+  // 🚀 WebCodecs 錄音實現 - 2025年業界領先技術（修復版）
   const startWebCodecsRecording = async (stream: MediaStream) => {
-    console.log('🚀 啟動 WebCodecs 硬體加速錄音');
+    console.log('🚀 啟動 WebCodecs 硬體加速錄音（修復版）');
     
-    // 重置音頻數據數組
-    audioChunks = [];
+    // 🎯 修復：重置獨立包數組
+    audioPackets = [];
     
     try {
       audioEncoder = new AudioEncoder({
         output: (chunk, metadata) => {
-          console.log(`🎵 WebCodecs 編碼輸出: ${chunk.byteLength} bytes`);
-          // 收集 OPUS 編碼數據
-          const data = new Uint8Array(chunk.byteLength);
-          chunk.copyTo(data);
-          audioChunks.push(data);
+          console.log(`🎵 WebCodecs 獨立包輸出: ${chunk.byteLength} bytes`);
+          // 🎯 關鍵修復：每個 chunk 已經是完整的 OPUS 包
+          const packetData = new Uint8Array(chunk.byteLength);
+          chunk.copyTo(packetData);
+          audioPackets.push(packetData); // 直接添加完整包，不合併
+          console.log(`📦 收集到 OPUS 包 ${audioPackets.length}: ${packetData.length} bytes`);
         },
         error: (error) => {
           console.error('🚨 WebCodecs 編碼錯誤:', error);
-          setError(`WebCodecs 編碼失敗: ${error.message}，正在切換到相容模式...`);
-          // 降級到 MediaRecorder
-          startMediaRecorderRecording(stream);
+          setError(`WebCodecs 編碼失敗: ${error.message}`);
+          // 🎯 診斷模式：不降級，直接顯示錯誤以便分析
         }
       });
 
-      // WebCodecs OPUS 編碼配置 - 針對語音轉錄優化
-      const encoderConfig = {
+      // 🎯 優化配置：平衡品質與處理效率
+      const optimizedEncoderConfig = {
         codec: 'opus',
-        sampleRate: 48000,        // OPUS 標準採樣率
-        numberOfChannels: 1,      // 單聲道 (Whisper 要求)
-        bitrate: 128000,          // 128kbps 高品質語音
+        sampleRate: 48000,        // 固定48kHz（瀏覽器標準）
+        numberOfChannels: 1,      // 單聲道（Whisper要求）
+        bitrate: 96000,           // 🔧 優化：96kbps平衡品質與檔案大小
       };
 
-      console.log('🔧 WebCodecs 編碼器配置:', encoderConfig);
-      audioEncoder.configure(encoderConfig);
+      console.log('🔧 WebCodecs 優化編碼器配置:', optimizedEncoderConfig);
+      
+      // 立即配置編碼器
+      try {
+        audioEncoder.configure(optimizedEncoderConfig);
+        console.log('✅ 編碼器初始化配置成功');
+      } catch (configError) {
+        console.error('🚨 編碼器初始配置失敗:', configError);
+        setError(`WebCodecs 編碼器配置失敗: ${configError.message}`);
+        return;
+      }
 
       // 使用 MediaStreamTrackProcessor 處理音頻流
       const track = stream.getAudioTracks()[0];
       const processor = new MediaStreamTrackProcessor({ track });
       const reader = processor.readable.getReader();
 
-      // 處理音頻幀
+      // 處理音頻幀 - 簡化版本
       const processAudioFrames = async () => {
+        let frameCount = 0;
+        
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           
+          // 🔍 首幀診斷（簡化版）
+          if (frameCount === 0) {
+            console.log('🎵 AudioFrame 格式確認:');
+            console.log(`  - 聲道數: ${value.numberOfChannels}`);
+            console.log(`  - 採樣率: ${value.sampleRate}Hz`);
+            console.log(`  - 持續時間: ${value.duration}μs`);
+            console.log('📊 使用固定48kHz配置進行OPUS編碼');
+          }
+          frameCount++;
+          
+          // 直接編碼（編碼器已在初始化時配置）
           if (audioEncoder && audioEncoder.state === 'configured') {
             try {
               audioEncoder.encode(value);
@@ -240,22 +262,22 @@ function App() {
           }
           value.close(); // 釋放音頻幀資源
         }
+        console.log(`📊 總共處理了 ${frameCount} 個 AudioFrame`);
       };
 
       // 開始處理音頻幀
       processAudioFrames().catch(err => {
         console.error('🚨 音頻處理流程錯誤:', err);
-        setError('WebCodecs 音頻處理失敗，正在降級...');
-        startMediaRecorderRecording(stream);
+        setError(`WebCodecs 音頻處理失敗: ${err.message}`);
+        // 🎯 診斷模式：不降級，保持錯誤狀態以便分析
       });
 
       console.log('✅ WebCodecs 錄音已啟動');
       
     } catch (error) {
       console.error('🚨 WebCodecs 初始化失敗:', error);
-      setError('WebCodecs 不可用，使用相容模式錄音...');
-      // 降級到 MediaRecorder
-      startMediaRecorderRecording(stream);
+      setError(`WebCodecs 初始化失敗: ${error.message}`);
+      // 🎯 診斷模式：不降級，直接報錯以便分析問題
     }
   };
 
@@ -322,11 +344,11 @@ function App() {
       setError(null);
       setResult(null);
       
-      // 根據 WebCodecs 支援情況優化音頻配置
+      // 🔧 修復音頻配置一致性 - 統一使用48kHz避免瀏覽器重採樣
       const browser = browserInfo();
       const audioConstraints = {
-        sampleRate: browser?.webCodecsSupported ? 48000 : 16000,  // WebCodecs 使用 48kHz
-        channelCount: 1,
+        sampleRate: 48000,        // 🎯 修復: 統一使用48kHz (與WebCodecs編碼器一致)
+        channelCount: 1,          // 單聲道
         echoCancellation: true,
         noiseSuppression: true
       };
@@ -335,6 +357,16 @@ function App() {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: audioConstraints
       });
+      
+      // 🔍 診斷: 檢查瀏覽器實際提供的音頻配置
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        const trackSettings = audioTrack.getSettings();
+        console.log(`🔍 瀏覽器實際音頻配置:`, trackSettings);
+        console.log(`  - 實際採樣率: ${trackSettings.sampleRate}Hz`);
+        console.log(`  - 實際聲道數: ${trackSettings.channelCount}`);
+        console.log(`  - 配置匹配: ${trackSettings.sampleRate === 48000 ? '✅ 一致' : '⚠️ 不匹配'}`);
+      }
       
       // 🚀 智能錄音方式選擇 - 2025年業界領先
       if (browser?.recordingMethod === 'webcodecs' && browser.webCodecsSupported) {
@@ -371,27 +403,30 @@ function App() {
         audioEncoder.close();
         audioEncoder = null;
         
-        // 將收集的 OPUS 數據轉換為 Blob
-        if (audioChunks.length > 0) {
-          // 計算總大小
-          const totalSize = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-          const combinedData = new Uint8Array(totalSize);
-          let offset = 0;
+        // 🎯 修復：將獨立包轉換為 JSON 格式上傳
+        if (audioPackets.length > 0) {
+          // 創建包含獨立包的數據結構
+          const packetsData = {
+            format: 'webcodecs_opus_packets',
+            packet_count: audioPackets.length,
+            packets: audioPackets.map(packet => Array.from(packet)) // 轉換為數字陣列以便 JSON 序列化
+          };
           
-          // 合併所有 OPUS 數據
-          for (const chunk of audioChunks) {
-            combinedData.set(chunk, offset);
-            offset += chunk.length;
-          }
+          // 創建 JSON Blob
+          const jsonBlob = new Blob([JSON.stringify(packetsData)], { type: 'application/json' });
+          setAudioBlob(jsonBlob);
           
-          // 創建 OPUS Blob
-          const opusBlob = new Blob([combinedData], { type: 'audio/opus' });
-          setAudioBlob(opusBlob);
+          console.log(`✅ WebCodecs 錄音完成 - 格式: 獨立包模式, 包數量: ${audioPackets.length}, JSON 大小: ${jsonBlob.size} bytes`);
           
-          console.log(`✅ WebCodecs 錄音完成 - 格式: OPUS, 大小: ${opusBlob.size} bytes, 數據塊: ${audioChunks.length}`);
+          // 統計包大小分佈
+          const sizes = audioPackets.map(p => p.length);
+          const minSize = Math.min(...sizes);
+          const maxSize = Math.max(...sizes);
+          const avgSize = Math.round(sizes.reduce((a, b) => a + b, 0) / sizes.length);
+          console.log(`📊 包大小分佈: 最小=${minSize}b, 最大=${maxSize}b, 平均=${avgSize}b`);
         } else {
-          console.warn('⚠️ WebCodecs 錄音沒有收集到數據');
-          setError('錄音失敗：沒有收集到音頻數據');
+          console.warn('⚠️ WebCodecs 錄音沒有收集到獨立包');
+          setError('錄音失敗：沒有收集到音頻包數據');
         }
         
       } catch (error) {
@@ -432,19 +467,17 @@ function App() {
       let endpoint: string;
       let filename: string;
       
-      if (mimeType === 'audio/opus' && browser?.recordingMethod === 'webcodecs') {
-        // 🚀 WebCodecs 原始 OPUS 數據 - 業界領先永不降級策略
-        // 使用 WebCodecs 專用端點，最佳性能，專門處理 OPUS
-        endpoint = '/upload-webcodecs';
-        filename = 'webcodecs-recording.opus';  // 保持原始格式
+      if (mimeType === 'application/json' && browser?.recordingMethod === 'webcodecs') {
+        // 🚀 WebCodecs 獨立包模式 - 修復版實現
+        endpoint = '/upload';
+        filename = 'webcodecs-packets.json';
         
-        // 保持原始 OPUS 格式和 MIME 類型，最優性能
-        formData.append('audio', blob, filename);
+        // 上傳 JSON 格式的獨立包數據
+        formData.append('audio_packets', blob, filename);
         
-        console.log(`🚀 WebCodecs 上傳 - 檔案: ${filename}, 原始MIME: ${mimeType}, 修正MIME: audio/ogg;codecs=opus, 大小: ${blob.size} bytes`);
-        console.log('🎯 使用智能 MIME 修正策略，確保後端識別');
+        console.log(`🚀 WebCodecs 獨立包上傳 - 檔案: ${filename}, MIME: ${mimeType}, 大小: ${blob.size} bytes`);
+        console.log('🎯 使用統一端點，JSON 格式自動檢測');
         
-        // 跳過一般的 formData.append，因為上面已經做了
         const response = await fetch(endpoint, {
           method: 'POST',
           body: formData,
@@ -459,11 +492,11 @@ function App() {
         setResult(data);
         setAudioBlob(null);
         
-        console.log('✅ WebCodecs 智能上傳成功');
+        console.log('✅ WebCodecs 獨立包上傳成功');
         return;
       } else {
-        // MediaRecorder 傳統格式 - 統一使用 WebCodecs 端點處理
-        endpoint = '/upload-webcodecs';
+        // MediaRecorder 傳統格式 - 統一使用標準端點
+        endpoint = '/upload';
         
         // 業界領先：智能檔名生成
         filename = 'recording';
@@ -474,9 +507,11 @@ function App() {
         else filename += browser?.ext || '.webm';
         
         console.log(`📼 MediaRecorder 上傳 - 檔案: ${filename}, MIME: ${mimeType}, 瀏覽器: ${browser?.name}`);
+        console.log('🎯 使用統一端點，二進制格式自動檢測');
+        
+        // 對於二進制格式，使用標準的 audio 欄位名
+        formData.append('audio', blob, filename);
       }
-      
-      formData.append('audio', blob, filename);
       
       // 發送到對應的後端端點
       const response = await fetch(endpoint, {
@@ -605,7 +640,7 @@ function App() {
               </div>
               <div style="font-size: 12px; color: #6b7280;">
                 📁 檔案大小: {Math.round((audioBlob()?.size || 0) / 1024)} KB | 
-                🎵 格式: {audioBlob()?.type} | 
+                🎵 格式: {audioBlob()?.type === 'application/json' ? 'WebCodecs 獨立包' : audioBlob()?.type} | 
                 🌐 瀏覽器: {browserInfo()?.name}
               </div>
             </div>
@@ -630,7 +665,7 @@ function App() {
             <div style="font-size: 20px; margin-bottom: 12px; animation: pulse 1s infinite;">🤖 AI 處理中...</div>
             <div style="font-size: 14px; color: #1e40af; margin-bottom: 8px;">正在使用 Whisper AI 轉錄音頻並生成摘要</div>
             <div style="font-size: 12px; color: #6b7280;">
-              🎵 音頻格式: {audioBlob()?.type} | 📁 大小: {Math.round((audioBlob()?.size || 0) / 1024)} KB
+              🎵 音頻格式: {audioBlob()?.type === 'application/json' ? 'WebCodecs 獨立包' : audioBlob()?.type} | 📁 大小: {Math.round((audioBlob()?.size || 0) / 1024)} KB
             </div>
             <div style="width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-top: 12px;">
               <div style="height: 100%; background: #3b82f6; width: 100%; animation: progress 2s linear infinite;"></div>
