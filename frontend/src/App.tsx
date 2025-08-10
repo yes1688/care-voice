@@ -530,7 +530,7 @@ function App() {
       setResult(data);
       setAudioBlob(null); // Clear the audio blob after successful upload
       
-      console.log(`✅ ${endpoint === '/upload-webcodecs' ? 'WebCodecs' : 'MediaRecorder'} 上傳成功`);
+      console.log(`✅ 上傳成功`);
       
     } catch (err) {
       console.error('Upload failed:', err);
