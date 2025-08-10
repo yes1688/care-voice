@@ -88,7 +88,6 @@ Care Voice 是為 NVIDIA GPU 而生的語音轉錄系統，我們相信：
    - 使用 ExitPlanMode 工具建立計劃時自動觸發
    - 檔案格式：`YYYY-MM-DD_HHMM_計劃簡述.md`
    - 儲存位置：`docs/plans/active/`
-   - 同時儲存到 Qdrant 記憶系統
 
 2. **計劃執行中**：
    - 使用 TodoWrite 工具時自動更新計劃狀態
@@ -110,9 +109,9 @@ Care Voice 是為 NVIDIA GPU 而生的語音轉錄系統，我們相信：
 ### 自動更新項目
 - PLANS_INDEX.md - 計劃總索引
 - PROJECT_TIMELINE.md - 專案時間軸
-- Qdrant 記憶系統 - 關鍵決策記錄
+- 計劃檔案系統 - 結構化記錄保存
 
-**重要**：每次計劃結束時，必須記錄到記憶系統以供未來參考。
+**重要**：每次計劃結束時，必須完整記錄到檔案系統以供未來參考。
 
 ## 最新技術成就
 
