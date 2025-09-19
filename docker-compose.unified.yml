@@ -14,10 +14,10 @@ services:
     # 容器名稱
     container_name: care-voice-unified
     
-    # 端口映射
+    # 端口映射 - 統一架構
     ports:
-      - "3000:3000"    # 前端
-      - "8081:8081"    # 後端 API
+      - "7004:7004"    # 前端統一入口
+      - "8005:8005"    # 後端 API (隱藏)
     
     # GPU 支援
     deploy:
@@ -31,13 +31,13 @@ services:
     # 環境變數
     environment:
       - RUST_LOG=info
-      - BACKEND_PORT=8081
+      - BACKEND_PORT=8005
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=all
     
     # 健康檢查
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:7004/health"]
       interval: 30s
       timeout: 10s
       retries: 3

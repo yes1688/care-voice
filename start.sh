@@ -52,7 +52,7 @@ podman run -d --name care-voice-backend \
   --memory=4g \
   --memory-swap=6g \
   -e RUST_LOG=info \
-  -e BACKEND_PORT=3000 \
+  -e BACKEND_PORT=8005 \
   -e NVIDIA_VISIBLE_DEVICES=all \
   -e CUDA_VISIBLE_DEVICES=0 \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,utility \
@@ -93,9 +93,9 @@ echo "▶️  啟動統一前端服務..."
 podman run -d \
   --name care-voice-unified \
   --network care-voice-network \
-  -p 3000:3000 \
+  -p 7004:7004 \
   -v "$(pwd)/frontend/dist:/usr/share/nginx/html:ro" \
-  -v "$(pwd)/nginx-production.conf:/etc/nginx/conf.d/default.conf:ro" \
+  -v "$(pwd)/nginx-temp.conf:/etc/nginx/conf.d/default.conf:ro" \
   docker.io/library/nginx:alpine
 
 # 等待服務啟動
@@ -122,9 +122,9 @@ echo "  🌐 前端服務: $FRONTEND_STATUS"
 echo "  🤖 後端服務: $BACKEND_STATUS"
 echo ""
 echo "🔗 統一訪問入口:"
-echo "  🌐 主界面: http://localhost:3000"
-echo "  💊 健康檢查: http://localhost:3000/health"
-echo "  🎤 統一音頻上傳: http://localhost:3000/upload"
+echo "  🌐 主界面: http://localhost:7004"
+echo "  💊 健康檢查: http://localhost:7004/health"
+echo "  🎤 統一音頻上傳: http://localhost:7004/upload"
 echo ""
 echo "📋 服務管理:"
 echo "  前端日誌: podman logs -f care-voice-unified"
@@ -135,7 +135,7 @@ echo "🔧 Care Voice SOP 工作流程:"
 echo "  • 編譯：./build.sh (前端 + 後端容器)"
 echo "  • 啟動：./start.sh (純粹啟動服務)"
 echo "  • 關閉：./stop.sh (純粹關閉服務)"
-echo "  • 架構：localhost:3000 → nginx → care-voice-backend:3000"
+echo "  • 架構：localhost:7004 → nginx → care-voice-backend:8005"
 echo ""
 
 if [[ "$FRONTEND_STATUS" == "✅" ]]; then
