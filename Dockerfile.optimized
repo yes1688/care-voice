@@ -1,0 +1,134 @@
+# ===================================
+# Care Voice 優化編譯 Dockerfile
+# 分離依賴套件 vs 原始碼編譯
+# ===================================
+
+# ==========================================
+# 階段1: 依賴套件編譯 (可快取重複使用)
+# ==========================================
+FROM docker.io/nvidia/cuda:12.9.1-devel-ubuntu24.04 AS deps
+
+LABEL stage="dependencies-build"
+LABEL version="1.0.0"
+LABEL description="Care Voice 依賴套件編譯階段 - whisper-rs + Rust deps"
+
+# 安裝編譯環境
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    pkg-config \
+    libopus-dev \
+    libopus0 \
+    libssl-dev \
+    libclang-dev \
+    clang \
+    cmake \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "✅ CUDA 12.9.1 devel + 編譯環境安裝完成"
+
+# 安裝 Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && echo 'source ~/.cargo/env' >> ~/.bashrc \
+    && ~/.cargo/bin/rustup default stable \
+    && ~/.cargo/bin/rustup component add rustfmt clippy \
+    && echo "✅ Rust 工具鏈安裝完成"
+
+# 設置 Rust 環境
+ENV PATH="/root/.cargo/bin:${PATH}"
+ENV RUST_VERSION="1.85"
+
+# 配置 CUDA 環境 - RTX 50 系列優化
+ENV CUDA_ROOT="/usr/local/cuda"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+ENV CUDA_VISIBLE_DEVICES="all"
+ENV NVIDIA_VISIBLE_DEVICES="all"
+ENV NVIDIA_DRIVER_CAPABILITIES="compute,utility"
+ENV TORCH_CUDA_ARCH_LIST="12.0;8.0;8.6;8.9"
+ENV CUDA_ARCH_LIST="120;80;86;89"
+ENV GGML_CUDA_COMPUTE_CAPABILITY="120"
+
+WORKDIR /workspace
+
+# 🎯 關鍵步驟：只複製依賴定義檔案
+COPY backend/Cargo.toml backend/Cargo.lock ./
+
+# 🎯 建立假的 main.rs 來編譯依賴
+RUN mkdir src && \
+    echo "fn main() { println!(\"Dependencies build\"); }" > src/main.rs
+
+# 🚀 編譯依賴套件 (whisper-rs 等大套件)
+RUN echo "📦 開始編譯依賴套件..." && \
+    RUST_LOG=info cargo build --release && \
+    echo "✅ 依賴套件編譯完成" && \
+    rm -rf src/
+
+# ==========================================
+# 階段2: 應用程式編譯 (只編譯您的程式碼)
+# ==========================================
+FROM deps AS builder
+
+LABEL stage="application-build"
+LABEL description="Care Voice 應用程式編譯階段 - 只編譯 src/ 原始碼"
+
+# 🎯 複製您的真實程式碼
+COPY backend/src/ ./src/
+
+# 觸碰 main.rs 確保重新編譯應用程式
+RUN touch src/main.rs
+
+# 🚀 快速編譯應用程式 (依賴已經編譯好了)
+RUN echo "🦀 開始編譯 Care Voice 應用程式..." && \
+    RUST_LOG=info cargo build --release && \
+    echo "✅ 應用程式編譯完成"
+
+# 驗證編譯結果
+RUN ls -la target/release/ && \
+    echo "📊 應用程式編譯產出:" && \
+    echo "📏 二進制文件大小:" && \
+    du -sh target/release/care-voice
+
+# ==========================================
+# 階段3: 運行時環境 (乾淨的最終鏡像)
+# ==========================================
+FROM docker.io/nvidia/cuda:12.9.1-runtime-ubuntu24.04 AS runtime
+
+LABEL stage="runtime"
+LABEL version="2.0.0"
+LABEL description="Care Voice 優化運行時環境"
+
+# 安裝運行時依賴
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libopus0 \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 配置 CUDA 運行時環境
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+ENV CUDA_VISIBLE_DEVICES="all"
+ENV NVIDIA_VISIBLE_DEVICES="all"
+ENV NVIDIA_DRIVER_CAPABILITIES="compute,utility"
+
+# 創建應用目錄
+RUN mkdir -p /app/models
+WORKDIR /app
+
+# 🎯 只複製編譯好的二進制檔案
+COPY --from=builder /workspace/target/release/care-voice /app/care-voice
+RUN chmod +x /app/care-voice
+
+# 設置環境變數
+ENV RUST_LOG=info
+ENV BACKEND_PORT=8005
+
+# 健康檢查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8005/health || exit 1
+
+# 暴露端口
+EXPOSE 8005
+
+# 啟動命令
+CMD ["./care-voice"]

@@ -25,8 +25,8 @@ if [[ ! -f "frontend/dist/index.html" ]]; then
     exit 1
 fi
 
-if ! podman image exists localhost/care-voice-build-env:latest; then
-    echo "❌ 容器鏡像不存在，請先執行: ./build.sh"
+if ! podman image exists localhost/care-voice:optimized; then
+    echo "❌ 容器鏡像不存在，請先執行: ./build-optimized.sh"
     echo "💡 編譯完成後再執行: ./start.sh"
     exit 1
 fi
@@ -65,7 +65,7 @@ podman run -d --name care-voice-backend \
   -e GGML_CUDA_NO_PINNED=1 \
   -e CARE_VOICE_DEBUG_AUDIO=1 \
   -w /app \
-  localhost/care-voice:runtime \
+  localhost/care-voice:optimized \
   ./care-voice \
   2>/dev/null || echo "⚠️  後端啟動失敗，檢查編譯是否完成..."
 
