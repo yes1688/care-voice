@@ -52,6 +52,7 @@ WORKDIR /workspace
 
 # 🎯 關鍵步驟：只複製依賴定義檔案
 COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/.cargo ./.cargo
 
 # 🎯 建立假的 main.rs 來編譯依賴
 RUN mkdir src && \

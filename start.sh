@@ -44,7 +44,7 @@ podman run -d --name care-voice-backend \
   -v "$(pwd)/models:/app/models:ro" \
   -v "$(pwd)/audio-debug:/tmp/care-voice-debug:rw" \
   -v "/usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:ro" \
-  -v "/usr/local/cuda-13.0:/usr/local/cuda-13.0:ro" \
+  -v "/usr/local/cuda-12.9:/usr/local/cuda-12.9:ro" \
   -v "/dev:/dev" \
   --device /dev/nvidia0 \
   --device /dev/nvidiactl \
@@ -56,9 +56,9 @@ podman run -d --name care-voice-backend \
   -e NVIDIA_VISIBLE_DEVICES=all \
   -e CUDA_VISIBLE_DEVICES=0 \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-  -e CUDA_HOME=/usr/local/cuda \
-  -e PATH="/usr/local/cuda/bin:/usr/local/cuda-13.0/bin:$PATH" \
-  -e LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:/usr/local/cuda-13.0/lib64:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" \
+  -e CUDA_HOME=/usr/local/cuda-12.9 \
+  -e PATH="/usr/local/cuda-12.9/bin:$PATH" \
+  -e LD_LIBRARY_PATH="/usr/local/cuda-12.9/lib64:/usr/local/cuda-12.9/targets/x86_64-linux/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" \
   -e TORCH_CUDA_ARCH_LIST="12.0" \
   -e CUDA_ARCH_LIST="120" \
   -e GGML_CUDA_FORCE_MMV=1 \

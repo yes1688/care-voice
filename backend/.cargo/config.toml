@@ -1,0 +1,19 @@
+[env]
+# RTX 5070 Ti 專用 CUDA 架構配置
+CUDA_ARCH_LIST = "120"
+TORCH_CUDA_ARCH_LIST = "12.0"
+GGML_CUDA_COMPUTE_CAPABILITY = "120"
+
+# CUDA 路徑配置
+CUDA_ROOT = "/usr/local/cuda-12.9"
+CUDA_HOME = "/usr/local/cuda-12.9"
+CUDA_PATH = "/usr/local/cuda-12.9"
+
+# CUDA 編譯選項
+NVCC_PREPEND_FLAGS = "-arch=sm_120"
+CMAKE_CUDA_ARCHITECTURES = "120"
+
+# GPU 優化選項
+GGML_CUDA_FORCE_MMV = "1"
+GGML_CUDA_NO_PINNED = "1"
+GGML_CUDA_FORCE_CUBLAS = "1"

@@ -1,6 +1,6 @@
 // ===================================
-// Care Voice - 業界領先 AI 語音轉錄服務
-// 完整 GPU 加速 + 99.9% 瀏覽器支援
+// Speech-Ear - 業界領先 AI 語音轉錄服務
+// WebSocket 即時轉錄 + GPU 加速 + 99.9% 瀏覽器支援
 // ===================================
 
 // 高性能記憶體分配器
@@ -54,6 +54,9 @@ mod audio_decoder;
 // 多模型處理架構
 mod whisper_model_pool;
 mod gpu_memory_manager;
+
+// WebSocket 即時轉錄模組 (暫時移除)
+// mod websocket_handler;
 
 use audio_format::AudioFormat;
 use audio_decoder::UnifiedAudioDecoder;
@@ -451,12 +454,12 @@ async fn main() {
         )
         .init();
 
-    println!("🚀 Starting Care Voice backend with whisper-rs...");
+    println!("🚀 Starting Speech-Ear backend with whisper-rs...");
     println!("📊 Environment info:");
     println!("  - Working directory: {:?}", std::env::current_dir().unwrap_or_default());
     println!("  - RUST_LOG: {}", std::env::var("RUST_LOG").unwrap_or_else(|_| "Not set".to_string()));
     println!("  - Backend port: {}", std::env::var("BACKEND_PORT").unwrap_or_else(|_| "3000 (default)".to_string()));
-    info!("Starting Care Voice backend with whisper-rs...");
+    info!("Starting Speech-Ear backend with whisper-rs...");
     
     // 初始化 Whisper 服務
     println!("🔧 Initializing Whisper service...");
@@ -484,6 +487,7 @@ async fn main() {
         .route("/upload", post(upload_audio))  // 🚀 統一音頻上傳端點
         .route("/health", get(health_check))
         .route("/api/info", get(api_info))
+        // .route("/ws/transcribe", get(websocket_handler::websocket_handler))  // 🔌 WebSocket 即時轉錄 (暫時移除)
         .layer(cors)
         .with_state(whisper_service);
     
@@ -902,7 +906,7 @@ async fn api_info() -> axum::response::Html<String> {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>🎵 Care Voice API</title>
+    <title>🎵 Speech-Ear API</title>
     <meta charset="utf-8">
     <style>
         body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; background: #f8f9fa; }}
@@ -920,7 +924,7 @@ async fn api_info() -> axum::response::Html<String> {
 </head>
 <body>
     <div class="container">
-        <h1>🎵 Care Voice API</h1>
+        <h1>🎵 Speech-Ear API</h1>
         <div class="status success">✅ 服務運行正常</div>
         
         <h2>🚀 核心功能</h2>
@@ -994,7 +998,7 @@ fetch('/upload', {{
         </ul>
 
         <div style="text-align: center; margin-top: 30px; color: #6c757d;">
-            <p>🚀 Care Voice - 業界領先 AI 語音轉錄服務</p>
+            <p>🚀 Speech-Ear - 業界領先 AI 語音轉錄服務</p>
             <p>Build: OPUS Complete v1.0 | CUDA 12.9.1 | Whisper AI</p>
         </div>
     </div>
@@ -1109,7 +1113,7 @@ async fn health_check(
 
     Json(serde_json::json!({
         "status": overall_status,
-        "service": "Care Voice Enterprise",
+        "service": "Speech-Ear Enterprise",
         "version": "0.3.0",
         "performance_tier": "Industry Leading",
         "timestamp": timestamp,
