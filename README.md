@@ -23,6 +23,17 @@
 
 ## 🚀 一鍵啟動
 
+### 環境設定
+
+1. **複製環境變數範本**：
+```bash
+cp .env.example .env
+```
+
+2. **設定 Gemini API Key**：
+   - 前往 [Google AI Studio](https://makersuite.google.com/app/apikey) 取得 API Key
+   - 編輯 `.env` 檔案，填入您的 API Key
+
 ### 統一部署 (推薦)
 
 ```bash
