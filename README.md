@@ -1,143 +1,306 @@
-# 🎙️ Care Voice AI 語音轉錄系統
+# Care Voice - AI 語音轉錄平台
 
-**業界領先統一架構 - 決不降級，99.9% 瀏覽器相容性**
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CUDA](https://img.shields.io/badge/CUDA-12.9.1-green.svg)](https://developer.nvidia.com/cuda-toolkit)
+[![Rust](https://img.shields.io/badge/Rust-1.85-orange.svg)](https://www.rust-lang.org/)
 
-基於 Rust + OPUS + whisper-rs + CUDA 12.9.1 + SolidJS 的現代化 AI 語音轉錄解決方案。
+Care Voice 是一個企業級 AI 語音轉錄平台，採用 Rust 和 CUDA 加速技術建構。專為高效能、可擴展的部署環境設計，提供 GPU 優化與通用瀏覽器相容性。
 
-## ✨ 業界領先特色
+## 概述
 
-- 🚀 **統一架構**：單一容器，完整前後端整合
-- 🎵 **OPUS 完整支援**：WebM-OPUS (Chrome/Edge) + OGG-OPUS (Firefox) 
-- ⚡ **GPU 加速**：whisper-rs CUDA 支援，極致性能
-- 🌐 **現代前端**：SolidJS + 智能瀏覽器檢測
-- 🐳 **一鍵部署**：Docker Compose 開箱即用
-- 💯 **99.9% 相容性**：業界最廣瀏覽器支援
+Care Voice 使用 OpenAI Whisper 模型提供即時語音轉文字轉錄服務，針對生產環境進行優化。本平台結合 Rust 的效能優勢與 CUDA GPU 加速，提供企業級的轉錄解決方案。
 
-## 📚 文檔導航
+### 核心功能
 
-| 文檔 | 說明 |
-|------|------|
-| 🚀 [**快速開始**](./docs/QUICK_START.md) | 一鍵部署和基本使用 |
-| 🏗️ [**系統架構**](./docs/ARCHITECTURE.md) | 技術設計和實施方案 |
-| 📦 [**部署指南**](./docs/DEPLOYMENT.md) | 完整部署和故障排除 |
+- **GPU 加速**：原生支援 CUDA 12.9.1 與 whisper-rs，針對 NVIDIA RTX 系列 GPU 優化
+- **通用相容性**：支援 WebM-OPUS (Chrome/Edge) 與 OGG-OPUS (Firefox)，達成 99.9% 瀏覽器覆蓋率
+- **生產就緒**：容器化部署支援 Docker/Podman，提供企業級監控與健康檢查
+- **現代架構**：後端採用 Rust 確保效能，前端使用 SolidJS 提供響應式介面
+- **可擴展設計**：統一容器架構搭配 Nginx 反向代理，實現高效負載分配
 
-## 🚀 一鍵啟動
+## 快速開始
 
-### 環境設定
+### 系統需求
 
-1. **複製環境變數範本**：
+- **作業系統**：Ubuntu 24.04 LTS 或相容的 Linux 發行版
+- **容器執行環境**：Docker 20.10+ 或 Podman 4.0+
+- **GPU**（選配）：NVIDIA GPU 運算能力 6.0+（GTX 10xx 系列或更新）
+- **記憶體**：最低 8GB RAM（建議 16GB）
+- **CUDA**（GPU 加速用）：CUDA Toolkit 12.0 或更新版本
+
+### 安裝步驟
+
+1. **複製儲存庫**
+
+```bash
+git clone https://github.com/yes1688/care-voice.git
+cd care-voice
+```
+
+2. **設定環境變數**
+
 ```bash
 cp .env.example .env
 ```
 
-2. **設定 Gemini API Key**：
-   - 前往 [Google AI Studio](https://makersuite.google.com/app/apikey) 取得 API Key
-   - 編輯 `.env` 檔案，填入您的 API Key
-
-### 統一部署 (推薦)
+編輯 `.env` 並設定您的 API 金鑰：
 
 ```bash
-# 一鍵啟動完整系統
+# Gemini API 設定
+GEMINI_API_KEY=your_api_key_here
+
+# 前端設定
+VITE_API_URL=http://localhost:8000
+```
+
+> **注意**：請前往 [Google AI Studio](https://makersuite.google.com/app/apikey) 取得 Gemini API 金鑰
+
+3. **啟動平台**
+
+```bash
 ./start.sh
-
-# 或使用 Docker Compose
-docker-compose -f docker-compose.unified.yml up -d
 ```
 
-### 系統需求
+平台將於以下位置提供服務：
+- **前端介面**：http://localhost:7004
+- **健康檢查**：http://localhost:7004/health
+- **API 上傳**：http://localhost:7004/upload
 
-- **GPU**: NVIDIA GTX 10xx+ 或 RTX 系列 (可選)
-- **運行時**: Docker + Docker Compose
-- **記憶體**: 8GB+ 系統記憶體
+### 快速使用指南
 
-### 使用方式
+1. 前往網頁介面 http://localhost:7004
+2. 點擊錄音按鈕開始音訊擷取
+3. 清楚地對著麥克風說話
+4. 停止錄音以啟動轉錄
+5. 即時查看轉錄結果
 
-1. 🌐 **前端界面**: http://localhost:3000
-2. 🤖 **API 服務**: http://localhost:8081  
-3. 💊 **健康檢查**: http://localhost:3000/health
+## 系統架構
 
-### 停止服務
+### 技術堆疊
+
+| 元件 | 技術 | 版本 |
+|------|------|------|
+| 後端執行環境 | Rust | 1.85+ |
+| AI 模型 | whisper-rs | 0.14.3 |
+| GPU 加速 | CUDA | 12.9.1 |
+| 前端框架 | SolidJS | 1.9.0 |
+| Web 伺服器 | Nginx | Latest |
+| 容器平台 | Docker/Podman | 20.10+/4.0+ |
+| 基礎作業系統 | Ubuntu | 24.04 LTS |
+
+### 系統架構流程圖
+
+```mermaid
+graph LR
+    subgraph 前端層
+        A[瀏覽器<br/>WebM-OPUS/OGG-OPUS]
+        B[SolidJS 介面]
+    end
+
+    subgraph 反向代理層
+        C[Nginx :7004<br/>負載平衡 + TLS]
+    end
+
+    subgraph 後端服務層
+        D[Rust 後端 :8005]
+        E[whisper-rs 引擎]
+        F[CUDA 12.9.1 GPU]
+    end
+
+    subgraph AI 模型層
+        G[Whisper Model<br/>語音辨識]
+    end
+
+    subgraph 輸出層
+        H[轉錄結果<br/>JSON Response]
+    end
+
+    A -->|HTTP/WebSocket| B
+    B -->|API Request| C
+    C -->|Proxy Pass| D
+    D -->|Audio Data| E
+    E -->|GPU Compute| F
+    F -->|Inference| G
+    G -->|Transcription| H
+    H -->|Response| A
+
+    style A fill:#e1f5fe
+    style C fill:#fff3e0
+    style D fill:#f3e5f5
+    style F fill:#e8f5e9
+    style G fill:#fce4ec
+    style H fill:#e0f2f1
+```
+
+### 效能指標
+
+| 指標 | 數值 | 改善幅度 |
+|------|------|----------|
+| 記憶體使用 | ~3GB VRAM | 減少 50% |
+| 冷啟動時間 | <30 秒 | 加速 50% |
+| 轉錄延遲 | 即時處理 | GPU 加速 |
+| 瀏覽器支援 | 99.9% | 通用相容性 |
+
+## 部署方案
+
+### Docker 部署
 
 ```bash
-./stop.sh
+# 建構優化映像檔
+docker build -f Dockerfile.optimized -t care-voice:latest .
+
+# 以 GPU 支援執行
+docker run -d \
+  --name care-voice \
+  --gpus all \
+  -p 7004:7004 \
+  -e CUDA_VISIBLE_DEVICES=all \
+  care-voice:latest
 ```
 
-## 📖 快速使用流程
+### Kubernetes 部署
 
-1. 🎯 **一鍵部署**: `./start.sh` 啟動完整系統
-2. 🎤 **開始錄音**: 點擊錄音按鈕進行語音錄製
-3. ⚡ **自動轉錄**: whisper-rs GPU 即時處理
-4. 📝 **查看結果**: 獲得完整逐字稿和智能摘要
+參考 [k8s/deployment.yaml](./k8s/deployment.yaml) 取得企業級 Kubernetes 設定，包含：
+- 水平 Pod 自動擴展 (HPA)
+- GPU 資源管理
+- 健康探測與監控
+- 模型儲存 PersistentVolume
 
-## 🏗️ 技術架構
+### 生產環境考量
 
-### 核心技術棧
-- **whisper-rs 0.14.3**: Rust 原生 CUDA 加速語音轉錄
-- **CUDA 12.9.1**: 2025年最新版本，完整支援 RTX 50 系列
-- **Ubuntu 24.04**: 最新 LTS 長期支援版本
-- **Solid.js**: 現代化前端界面
-- **容器化**: Podman/Docker 一鍵部署
+- **GPU 優化**：為多 GPU 環境設定 CUDA_VISIBLE_DEVICES
+- **負載平衡**：使用 Nginx 或雲端負載平衡器進行水平擴展
+- **監控整合**：整合 Prometheus 進行指標收集
+- **安全性**：在反向代理層級設定 TLS/SSL 終止
 
-### 效能優勢
+## 開發指南
 
-| 指標 | 數值 | 相比傳統方案 |
-|------|------|-------------|
-| **記憶體使用** | ~3GB VRAM | 節省 50% |
-| **啟動時間** | <30 秒 | 減少 50% |
-| **轉錄精度** | 業界領先 | Rust 原生性能 |
-
-## 🛠️ 開發指令
-
-```bash
-# 建構 CUDA 12.9.1 終極版本
-podman build -f Dockerfile.whisper-rs-gpu -t care-voice:whisper-rs-gpu-v2 .
-
-# 運行服務
-podman run -d --name care-voice-ultimate --gpus all -p 8001:8001 care-voice:whisper-rs-gpu-v2
-
-# 檢查狀態
-podman logs care-voice-ultimate
-curl http://localhost:8001/health
-
-# GPU 診斷工具
-podman exec care-voice-ultimate python3 /app/gpu_diagnostics.py
-
-# 停止服務
-podman stop care-voice-ultimate && podman rm care-voice-ultimate
-```
-
-## 🚨 常見問題
-
-- **GPU 不可用**: 檢查 `nvidia-smi` 和 `--gpus all` 參數
-- **記憶體不足**: 確保至少 4GB VRAM 可用
-- **埠口衝突**: 使用 `lsof -i :8001` 檢查埠口佔用
-
-**詳細故障排除**: 參考 [部署指南](./docs/DEPLOYMENT.md)
-
-## 📁 專案結構
+### 專案結構
 
 ```
 care-voice/
-├── docs/                        # 📚 精簡文檔系統
-├── Dockerfile.unified           # 🐳 統一容器配置
-├── backend/                     # 🦀 Rust whisper-rs 後端
-├── frontend/                    # ⚛️ Solid.js 前端
-├── claude.md                    # ⚙️ 系統配置
-└── README.md                    # 📖 專案入口 (本文檔)
+├── backend/              # Rust 後端服務
+│   ├── src/             # 原始碼
+│   ├── Cargo.toml       # Rust 相依性
+│   └── Dockerfile       # 後端容器
+├── frontend/            # SolidJS 前端
+│   ├── src/            # 元件程式碼
+│   ├── nginx.conf      # 前端伺服器設定
+│   └── package.json    # Node 相依性
+├── k8s/                # Kubernetes 配置檔
+├── docs/               # 說明文件
+├── scripts/            # 工具腳本
+└── models/             # AI 模型儲存
 ```
 
-## 🏆 專案特色
+### 從原始碼建構
 
-- 🚀 **業界領先**: CUDA 12.9.1 + Ubuntu 24.04，超越主機配置的容器化方案
-- ✅ **RTX 50 征服**: 原生支援 compute_120 架構，RTX 5070 Ti 完全兼容
-- ✅ **效能卓越**: 記憶體使用減少 50%，啟動時間縮短 50%  
-- ✅ **技術前瞻**: 為 CUDA 13.0 時代奠定基礎，持續技術領先
-- ✅ **完整解決方案**: 系統性克服 CUDA 技術障礙，決不降級妥協
+**後端 (Rust)**
 
-## 📄 授權
+```bash
+cd backend
+cargo build --release --features cuda,high-performance
+```
 
-MIT License - 開源自由使用
+**前端 (SolidJS)**
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+### 開發指令
+
+```bash
+# 啟動開發伺服器
+./start.sh
+
+# 查看後端日誌
+podman logs -f care-voice-backend
+
+# 查看前端日誌
+podman logs -f care-voice-unified
+
+# 停止所有服務
+./stop.sh
+```
+
+## 設定選項
+
+### 環境變數
+
+| 變數 | 說明 | 預設值 |
+|------|------|--------|
+| `GEMINI_API_KEY` | Google Gemini API 金鑰 | 必填 |
+| `VITE_API_URL` | 後端 API 端點 | `http://localhost:8000` |
+| `CUDA_VISIBLE_DEVICES` | GPU 裝置選擇 | `all` |
+| `RUST_LOG` | 日誌記錄層級 | `info` |
+
+### 進階設定
+
+詳細設定選項請參閱 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)
+
+## 疑難排解
+
+### 常見問題
+
+**GPU 未偵測到**
+```bash
+# 驗證 NVIDIA 驅動程式安裝
+nvidia-smi
+
+# 檢查容器中的 CUDA 可用性
+docker run --gpus all nvidia/cuda:12.9.1-base-ubuntu24.04 nvidia-smi
+```
+
+**連接埠衝突**
+```bash
+# 檢查連接埠使用狀況
+lsof -i :7004
+
+# 在 docker-compose 或啟動腳本中修改連接埠
+```
+
+**記憶體問題**
+- 確保至少有 4GB VRAM 可用於 GPU 推論
+- 監控記憶體使用：`nvidia-smi -l 1`
+
+如需更多支援，請參閱 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) 或提交問題單。
+
+## 說明文件
+
+- [快速入門指南](./docs/QUICK_START.md)
+- [架構概述](./docs/ARCHITECTURE.md)
+- [部署指南](./docs/DEPLOYMENT.md)
+- [API 文件](./docs/API.md)
+
+## 貢獻
+
+歡迎提出問題與建議！
+
+1. Fork 本儲存庫
+2. 建立功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交您的變更 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送至分支 (`git push origin feature/AmazingFeature`)
+5. 開啟 Pull Request
+
+## 授權條款
+
+本專案採用 MIT 授權條款 - 詳見 [LICENSE](LICENSE) 檔案。
+
+## 致謝
+
+- **OpenAI Whisper**：提供基礎語音辨識模型
+- **whisper-rs**：Whisper 的 Rust 繫結
+- **NVIDIA**：CUDA 工具包與 GPU 加速支援
+
+## 技術支援
+
+- **問題回報**：[GitHub Issues](https://github.com/yes1688/care-voice/issues)
+- **說明文件**：[docs/](./docs/)
+- **社群討論**：[Discussions](https://github.com/yes1688/care-voice/discussions)
 
 ---
 
-**📚 精簡文檔**: [docs/ 資料夾](./docs/) | **系統配置**: [claude.md](./claude.md)
+**Copyright © 2025 David Liou. 版權所有。**
