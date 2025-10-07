@@ -1,6 +1,6 @@
 # Care Voice - AI 語音轉錄系統
 
-> 個人獨立開發的 AI 語音轉錄專案，使用 Rust + CUDA + Whisper 實現高效能即時轉錄
+> 使用 Rust + CUDA + Whisper 實現高效能即時轉錄
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CUDA](https://img.shields.io/badge/CUDA-12.9.1-green.svg)](https://developer.nvidia.com/cuda-toolkit)
@@ -8,7 +8,7 @@
 
 ## 專案簡介
 
-這是一個從零開始打造的 AI 語音轉錄系統，採用 Rust 後端搭配 CUDA GPU 加速，實現即時語音辨識功能。專案整合了 OpenAI Whisper 模型，並針對不同瀏覽器的音訊格式做了相容性處理。
+AI 語音轉錄系統，採用 Rust 後端搭配 CUDA GPU 加速，實現即時語音辨識。整合 OpenAI Whisper 模型，並處理跨瀏覽器音訊格式相容性。
 
 ### 為什麼做這個專案？
 
@@ -226,4 +226,4 @@ MIT License - 詳見 [LICENSE](LICENSE)
 
 ---
 
-*個人開發專案 - 2025*
+*2025*
