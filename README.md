@@ -217,14 +217,13 @@ podman logs -f care-voice-backend
 
 ## 授權
 
-MIT License - 詳見 [LICENSE](LICENSE)
+MIT License - 歡迎自由使用與修改
 
 ## 聯絡方式
 
-- **作者**：David Liou
 - **GitHub**：[@yes1688](https://github.com/yes1688)
 - **專案問題**：[Issues](https://github.com/yes1688/care-voice/issues)
 
 ---
 
-> 💡 這是一個個人學習專案，歡迎交流與討論！
+> 💡 這是一個個人學習專案，歡迎交流與討論！如果這個專案對你有幫助，歡迎給個 Star ⭐
