@@ -217,7 +217,11 @@ podman logs -f care-voice-backend
 
 ## 授權
 
-MIT License - 歡迎自由使用與修改
+MIT License
+
+Copyright (c) 2025 davidliou
+
+本專案採用 MIT 授權條款，歡迎自由使用、修改與散布。詳見 [LICENSE](LICENSE) 檔案。
 
 ## 聯絡方式
 
